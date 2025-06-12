@@ -47,6 +47,7 @@ class UserResponseSchema(BaseModel):
     username: str
     email: str
     phone: Optional[str]
+    avatar: Optional[str]
     role: UserRole
     is_active: bool
     realname_status: RealnameStatus
@@ -61,6 +62,7 @@ class UserResponseSchema(BaseModel):
 class UserUpdateSchema(BaseModel):
     """用户更新schema"""
     phone: Optional[str] = None
+    avatar: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
     realname_status: Optional[RealnameStatus] = None
@@ -174,4 +176,12 @@ class ResetPasswordSchema(BaseModel):
 class VerificationCodeResponseSchema(BaseModel):
     """验证码响应schema"""
     message: str
-    expires_in: int  # 过期时间（秒） 
+    expires_in: int  # 过期时间（秒）
+
+
+class UploadResponseSchema(BaseModel):
+    """文件上传响应schema"""
+    url: str
+    filename: str
+    size: int
+    content_type: str 

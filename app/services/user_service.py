@@ -1,4 +1,4 @@
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 from tortoise.exceptions import IntegrityError
 from typing import Optional, Dict, Any
 from app.models.user import User
@@ -20,6 +20,7 @@ from app.schemas.response import ResponseHelper, ApiResponse, PaginatedData
 from app.utils.jwt_utils import jwt_manager
 from app.utils.email_utils import email_sender, generate_verification_code, generate_reset_token
 from app.utils.redis_utils import EmailVerificationManager, PasswordResetManager
+from app.utils.cos_utils import cos_uploader
 
 
 class UserService:
@@ -317,4 +318,60 @@ class UserService:
             return ResponseHelper.success(paginated_data, "获取用户列表成功")
             
         except Exception as e:
-            return ResponseHelper.server_error(f"获取用户列表失败: {str(e)}") 
+            return ResponseHelper.server_error(f"获取用户列表失败: {str(e)}")
+
+    @staticmethod
+    async def upload_avatar(user: User, file: UploadFile) -> ApiResponse[dict]:
+        """上传用户头像"""
+        try:
+            # 上传到COS
+            file_url, upload_info = await cos_uploader.upload_avatar(file, user.id)
+            
+            # 删除旧头像（如果存在）
+            if user.avatar:
+                old_filename = user.avatar.split('/')[-1]
+                if old_filename.startswith(cos_uploader.bucket):
+                    cos_uploader.delete_file(old_filename)
+            
+            # 更新用户头像URL
+            user.avatar = file_url
+            await user.save()
+            
+            return ResponseHelper.success(upload_info, "头像上传成功")
+            
+        except HTTPException as e:
+            return ResponseHelper.error(e.detail, e.status_code)
+        except Exception as e:
+            return ResponseHelper.server_error(f"头像上传失败: {str(e)}")
+
+    @staticmethod
+    async def delete_avatar(user: User) -> ApiResponse[dict]:
+        """删除用户头像"""
+        try:
+            if not user.avatar:
+                return ResponseHelper.error("用户未设置头像", 400)
+            
+            # 从COS删除文件
+            old_filename = user.avatar.split('/')[-1]
+            cos_uploader.delete_file(old_filename)
+            
+            # 清空用户头像URL
+            user.avatar = None
+            await user.save()
+            
+            return ResponseHelper.success({"deleted": True}, "头像删除成功")
+            
+        except Exception as e:
+            return ResponseHelper.server_error(f"头像删除失败: {str(e)}")
+
+    @staticmethod
+    async def logout(user: User) -> ApiResponse[dict]:
+        """用户退出登录"""
+        try:
+            # 简单的退出登录，主要在前端清除token
+            return ResponseHelper.success(
+                {"logout": True}, 
+                "退出登录成功"
+            )
+        except Exception as e:
+            return ResponseHelper.server_error(f"退出登录失败: {str(e)}") 

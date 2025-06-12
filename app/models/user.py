@@ -28,6 +28,7 @@ class User(Model):
     email = fields.CharField(max_length=100, unique=True, description="邮箱")
     password = fields.CharField(max_length=255, description="密码")
     phone = fields.CharField(max_length=20, null=True, description="手机号")
+    avatar = fields.CharField(max_length=500, null=True, description="头像URL")
     role = fields.CharEnumField(UserRole, default=UserRole.USER, description="用户角色")
     is_active = fields.BooleanField(default=True, description="是否激活")
     realname_status = fields.CharEnumField(
@@ -71,6 +72,7 @@ class User(Model):
             "username": self.username,
             "email": self.email,
             "phone": self.phone,
+            "avatar": self.avatar,
             "role": self.role,
             "is_active": self.is_active,
             "realname_status": self.realname_status,

@@ -19,7 +19,7 @@ DATABASE_CONFIG: Dict[str, Any] = {
     },
     "apps": {
         "models": {
-            "models": ["app.models.user", "aerich.models"],
+            "models": ["app.models.user", "app.models.realname_auth", "aerich.models"],
             "default_connection": "default",
         }
     },

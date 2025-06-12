@@ -7,6 +7,13 @@ from .user import (
     TokenPayload,
     ChangePasswordSchema
 )
+from .realname_auth import (
+    RealnameAuthSubmitSchema,
+    RealnameAuthResponseSchema,
+    RealnameAuthUpdateStatusSchema,
+    RealnameAuthListItemSchema,
+    IdCardUploadResponseSchema
+)
 
 __all__ = [
     "UserRegisterSchema",
@@ -15,6 +22,11 @@ __all__ = [
     "UserUpdateSchema",
     "LoginResponseSchema",
     "TokenPayload",
-    "ChangePasswordSchema"
+    "ChangePasswordSchema",
+    "RealnameAuthSubmitSchema",
+    "RealnameAuthResponseSchema",
+    "RealnameAuthUpdateStatusSchema",
+    "RealnameAuthListItemSchema",
+    "IdCardUploadResponseSchema"
 ]
 

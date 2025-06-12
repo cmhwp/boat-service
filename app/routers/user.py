@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from typing import Dict, Any
 from app.schemas.user import (
     UserRegisterSchema,
@@ -12,7 +12,8 @@ from app.schemas.user import (
     CompleteRegistrationSchema,
     ForgotPasswordSchema,
     ResetPasswordSchema,
-    VerificationCodeResponseSchema
+    VerificationCodeResponseSchema,
+    UploadResponseSchema
 )
 from app.schemas.response import ApiResponse, ResponseHelper, DictResponse, PaginatedData
 from app.services.user_service import UserService
@@ -71,6 +72,16 @@ async def login(login_data: UserLoginSchema):
     返回访问令牌和用户信息
     """
     return await UserService.login(login_data)
+
+
+@router.post("/logout", response_model=ApiResponse[dict], summary="用户退出登录")
+async def logout(current_user: User = Depends(get_current_user)):
+    """
+    用户退出登录接口
+    
+    退出当前登录状态，前端需要清除本地存储的token
+    """
+    return await UserService.logout(current_user)
 
 
 @router.get("/me", response_model=ApiResponse[UserResponseSchema], summary="获取当前用户信息")
@@ -166,4 +177,25 @@ async def get_users_list(
     current_user: User = Depends(require_admin)
 ):
     """获取用户列表（仅管理员）"""
-    return await UserService.get_users_list(page, page_size) 
+    return await UserService.get_users_list(page, page_size)
+
+
+@router.post("/upload-avatar", response_model=ApiResponse[UploadResponseSchema], summary="上传用户头像")
+async def upload_avatar(
+    file: UploadFile = File(..., description="头像文件"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    上传用户头像
+    
+    - **file**: 头像图片文件（支持jpg、jpeg、png、gif、webp格式，最大10MB）
+    
+    自动压缩图片并上传到腾讯云COS
+    """
+    return await UserService.upload_avatar(current_user, file)
+
+
+@router.delete("/avatar", response_model=ApiResponse[dict], summary="删除用户头像")
+async def delete_avatar(current_user: User = Depends(get_current_user)):
+    """删除当前用户的头像"""
+    return await UserService.delete_avatar(current_user) 
