@@ -10,12 +10,32 @@ from app.schemas.crew import (
     CrewUpdateSchema,
     CrewListItemSchema
 )
+from app.schemas.merchant import MerchantListItemSchema
 from app.schemas.response import ApiResponse, PaginatedData
 from app.services.crew_service import CrewService
+from app.services.merchant_service import MerchantService
 from app.utils.auth import get_current_user, require_merchant
 from app.models.user import User
+from app.models.merchant import MerchantStatus
 
 router = APIRouter(prefix="/crew", tags=["crew"])
+
+
+@router.get("/merchants", response_model=ApiResponse[PaginatedData[MerchantListItemSchema]], summary="获取可申请的商家列表")
+async def get_available_merchants(
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(10, description="每页数量", ge=1, le=100),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取可申请的商家列表
+    
+    - **page**: 页码（默认1）
+    - **page_size**: 每页数量（默认10，最大100）
+    
+    返回所有审核通过（active状态）的商家列表，用户可以从中选择申请成为船员
+    """
+    return await MerchantService.get_merchants_list(page, page_size, MerchantStatus.ACTIVE)
 
 
 @router.post("/apply", response_model=ApiResponse[CrewApplicationResponseSchema], summary="申请成为船员")

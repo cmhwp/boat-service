@@ -286,7 +286,7 @@ class CrewService:
         try:
             crew = await Crew.get_or_none(user=user).prefetch_related('user', 'merchant')
             if not crew:
-                return ResponseHelper.not_found("您不是船员")
+                return ResponseHelper.not_found("您不是船员，请先申请成为船员")
             
             crew_dict = await crew.to_dict()
             crew_detail = CrewDetailSchema(**crew_dict)
