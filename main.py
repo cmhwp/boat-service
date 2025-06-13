@@ -9,6 +9,8 @@ from app.config.database import DATABASE_CONFIG
 from app.config.redis_client import RedisClient
 from app.routers.user import router as user_router
 from app.routers.realname_auth import router as realname_auth_router
+from app.routers.merchant import router as merchant_router
+from app.routers.crew import router as crew_router
 from app.utils.exception_handlers import (
     http_exception_handler,
     validation_exception_handler,
@@ -61,6 +63,8 @@ app.add_exception_handler(Exception, general_exception_handler)
 # 注册路由
 app.include_router(user_router, prefix="/api/v1")
 app.include_router(realname_auth_router, prefix="/api/v1")
+app.include_router(merchant_router, prefix="/api/v1")
+app.include_router(crew_router, prefix="/api/v1")
 
 # 数据库配置
 register_tortoise(

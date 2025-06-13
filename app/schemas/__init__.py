@@ -14,6 +14,25 @@ from .realname_auth import (
     RealnameAuthListItemSchema,
     IdCardUploadResponseSchema
 )
+from .merchant import (
+    MerchantApplySchema,
+    MerchantUpdateSchema,
+    MerchantResponseSchema,
+    MerchantAuditSchema,
+    MerchantAuditResponseSchema,
+    MerchantListItemSchema,
+    MerchantDetailSchema
+)
+from .crew import (
+    CrewApplicationSchema,
+    CrewApplicationResponseSchema,
+    CrewApplicationDetailSchema,
+    CrewApplicationHandleSchema,
+    CrewResponseSchema,
+    CrewDetailSchema,
+    CrewUpdateSchema,
+    CrewListItemSchema
+)
 
 __all__ = [
     "UserRegisterSchema",
@@ -27,6 +46,21 @@ __all__ = [
     "RealnameAuthResponseSchema",
     "RealnameAuthUpdateStatusSchema",
     "RealnameAuthListItemSchema",
-    "IdCardUploadResponseSchema"
+    "IdCardUploadResponseSchema",
+    "MerchantApplySchema",
+    "MerchantUpdateSchema",
+    "MerchantResponseSchema",
+    "MerchantAuditSchema",
+    "MerchantAuditResponseSchema",
+    "MerchantListItemSchema",
+    "MerchantDetailSchema",
+    "CrewApplicationSchema",
+    "CrewApplicationResponseSchema",
+    "CrewApplicationDetailSchema",
+    "CrewApplicationHandleSchema",
+    "CrewResponseSchema",
+    "CrewDetailSchema",
+    "CrewUpdateSchema",
+    "CrewListItemSchema"
 ]
 

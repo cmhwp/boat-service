@@ -20,6 +20,7 @@ class COSConfig:
     # 文件路径前缀
     AVATAR_PREFIX = os.getenv("COS_AVATAR_PREFIX", "avatars/")
     IDENTITY_PREFIX = os.getenv("COS_IDENTITY_PREFIX", "identity/")
+    MERCHANT_LICENSE_PREFIX = os.getenv("COS_MERCHANT_LICENSE_PREFIX", "merchant-licenses/")
     BOAT_PREFIX = os.getenv("COS_BOAT_PREFIX", "boats/")
     SERVICE_PREFIX = os.getenv("COS_SERVICE_PREFIX", "services/")
     PRODUCT_PREFIX = os.getenv("COS_PRODUCT_PREFIX", "products/")

@@ -159,6 +159,51 @@ class COSUploader:
                 detail=f"文件上传失败: {str(e)}"
             )
     
+    async def upload_merchant_license(self, file: UploadFile, user_id: int) -> Tuple[str, dict]:
+        """上传商家营业执照"""
+        # 验证文件
+        self._validate_image_file(file)
+        
+        # 读取文件内容
+        file_content = await file.read()
+        
+        # 压缩图片（营业执照保持较高质量，限制2MB）
+        compressed_content = self._compress_image(file_content, max_size=2 * 1024 * 1024)
+        
+        # 生成文件名
+        filename = self._generate_filename(file.filename, cos_config.MERCHANT_LICENSE_PREFIX)
+        
+        try:
+            # 上传到COS
+            response = self.client.put_object(
+                Bucket=self.bucket,
+                Body=compressed_content,
+                Key=filename,
+                ContentType=file.content_type or 'image/jpeg'
+            )
+            
+            # 获取文件URL
+            file_url = cos_config.get_full_url(filename)
+            
+            # 返回结果
+            upload_info = {
+                'url': file_url,
+                'filename': filename,
+                'size': len(compressed_content),
+                'content_type': file.content_type or 'image/jpeg',
+                'etag': response.get('ETag', '').strip('"')
+            }
+            
+            logger.info(f"用户 {user_id} 营业执照上传成功: {filename}")
+            return file_url, upload_info
+            
+        except Exception as e:
+            logger.error(f"COS上传失败: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"文件上传失败: {str(e)}"
+            )
+    
     async def upload_image(self, file: UploadFile, prefix: str = "") -> Tuple[str, dict]:
         """通用图片上传"""
         # 验证文件
