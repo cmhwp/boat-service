@@ -1,7 +1,8 @@
 from fastapi import HTTPException, status, UploadFile
 from tortoise.exceptions import IntegrityError
 from typing import Optional, Dict, Any
-from app.models.user import User
+from tortoise.expressions import Q
+from app.models.user import User, UserRole, RealnameStatus
 from app.schemas.user import (
     UserRegisterSchema, 
     UserLoginSchema, 
@@ -297,12 +298,44 @@ class UserService:
             return ResponseHelper.server_error(f"验证重置链接失败: {str(e)}")
 
     @staticmethod
-    async def get_users_list(page: int = 1, page_size: int = 10) -> ApiResponse[PaginatedData[UserResponseSchema]]:
+    async def get_users_list(
+        page: int = 1, 
+        page_size: int = 10,
+        search: Optional[str] = None,
+        role: Optional[UserRole] = None,
+        realname_status: Optional[RealnameStatus] = None,
+        is_active: Optional[bool] = None
+    ) -> ApiResponse[PaginatedData[UserResponseSchema]]:
         """获取用户列表"""
         try:
+            # 构建查询条件
+            query = User.all()
+            
+            # 用户名/邮箱搜索
+            if search:
+                query = query.filter(
+                    Q(username__icontains=search) | Q(email__icontains=search)
+                )
+            
+            # 角色筛选
+            if role:
+                query = query.filter(role=role)
+            
+            # 实名认证状态筛选
+            if realname_status:
+                query = query.filter(realname_status=realname_status)
+            
+            # 账户状态筛选
+            if is_active is not None:
+                query = query.filter(is_active=is_active)
+            
+            # 计算总数
+            total = await query.count()
+            
+            # 分页查询
             offset = (page - 1) * page_size
-            users = await User.all().offset(offset).limit(page_size)
-            total = await User.all().count()
+            users = await query.offset(offset).limit(page_size).order_by('-created_at')
+            
             total_pages = (total + page_size - 1) // page_size
             
             user_list = [UserResponseSchema.from_orm(user) for user in users]

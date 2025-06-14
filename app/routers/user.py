@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from app.schemas.user import (
     UserRegisterSchema,
     UserLoginSchema,
@@ -18,7 +18,7 @@ from app.schemas.user import (
 from app.schemas.response import ApiResponse, ResponseHelper, DictResponse, PaginatedData
 from app.services.user_service import UserService
 from app.utils.auth import get_current_user, require_admin
-from app.models.user import User
+from app.models.user import User, UserRole, RealnameStatus
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -174,10 +174,29 @@ async def verify_reset_token(token: str):
 async def get_users_list(
     page: int = Query(1, description="页码", ge=1),
     page_size: int = Query(10, description="每页数量", ge=1, le=100),
+    search: Optional[str] = Query(None, description="搜索用户名或邮箱"),
+    role: Optional[UserRole] = Query(None, description="用户角色筛选"),
+    realname_status: Optional[RealnameStatus] = Query(None, description="实名认证状态筛选"),
+    is_active: Optional[bool] = Query(None, description="账户状态筛选"),
     current_user: User = Depends(require_admin)
 ):
-    """获取用户列表（仅管理员）"""
-    return await UserService.get_users_list(page, page_size)
+    """
+    获取用户列表（仅管理员）
+    
+    支持以下筛选条件：
+    - **search**: 搜索用户名或邮箱
+    - **role**: 用户角色筛选 (user, crew, merchant, admin)
+    - **realname_status**: 实名认证状态筛选 (unverified, pending, verified)
+    - **is_active**: 账户状态筛选 (true/false)
+    """
+    return await UserService.get_users_list(
+        page=page, 
+        page_size=page_size,
+        search=search,
+        role=role,
+        realname_status=realname_status,
+        is_active=is_active
+    )
 
 
 @router.post("/upload-avatar", response_model=ApiResponse[UploadResponseSchema], summary="上传用户头像")
