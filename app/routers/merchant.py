@@ -9,7 +9,7 @@ from app.schemas.merchant import (
     MerchantListItemSchema,
     MerchantDetailSchema
 )
-from app.schemas.response import ApiResponse, PaginatedData
+from app.schemas.response import ApiResponse, PaginatedData, ResponseHelper
 from app.schemas.user import UploadResponseSchema
 from app.services.merchant_service import MerchantService
 from app.utils.auth import get_current_user, require_admin
@@ -42,9 +42,9 @@ async def upload_merchant_license(
             content_type=upload_info['content_type']
         )
         
-        return ApiResponse.success(response_data, "营业执照上传成功")
+        return ResponseHelper.success(response_data, "营业执照上传成功")
     except Exception as e:
-        return ApiResponse.error(f"上传失败: {str(e)}", 500)
+        return ResponseHelper.error(f"上传失败: {str(e)}", 500)
 
 
 @router.post("/apply", response_model=ApiResponse[MerchantResponseSchema], summary="申请成为商家")
