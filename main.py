@@ -11,6 +11,8 @@ from app.routers.user import router as user_router
 from app.routers.realname_auth import router as realname_auth_router
 from app.routers.merchant import router as merchant_router
 from app.routers.crew import router as crew_router
+from app.routers.boat import router as boat_router
+from app.routers.product import router as product_router
 from app.utils.exception_handlers import (
     http_exception_handler,
     validation_exception_handler,
@@ -65,6 +67,8 @@ app.include_router(user_router, prefix="/api/v1")
 app.include_router(realname_auth_router, prefix="/api/v1")
 app.include_router(merchant_router, prefix="/api/v1")
 app.include_router(crew_router, prefix="/api/v1")
+app.include_router(boat_router, prefix="/api/v1")
+app.include_router(product_router, prefix="/api/v1")
 
 # 数据库配置
 register_tortoise(

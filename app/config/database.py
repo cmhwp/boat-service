@@ -24,6 +24,8 @@ DATABASE_CONFIG: Dict[str, Any] = {
                 "app.models.realname_auth", 
                 "app.models.merchant", 
                 "app.models.crew", 
+                "app.models.boat",
+                "app.models.product",
                 "aerich.models"
             ],
             "default_connection": "default",
