@@ -104,7 +104,9 @@ class BoatService:
             if not boat:
                 return ResponseHelper.not_found("船只不存在")
 
-            boat_detail = BoatDetailSchema.from_orm(boat)
+            # 使用 to_dict 方法正确转换数据
+            boat_dict = await boat.to_dict()
+            boat_detail = BoatDetailSchema(**boat_dict)
             return ResponseHelper.success(boat_detail, "获取船只详情成功")
 
         except Exception as e:

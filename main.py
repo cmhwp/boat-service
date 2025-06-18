@@ -13,6 +13,7 @@ from app.routers.merchant import router as merchant_router
 from app.routers.crew import router as crew_router
 from app.routers.boat import router as boat_router
 from app.routers.product import router as product_router
+from app.routers.booking import router as booking_router
 from app.utils.exception_handlers import (
     http_exception_handler,
     validation_exception_handler,
@@ -32,9 +33,31 @@ async def lifespan(app: FastAPI):
     # 启动时初始化Redis连接
     await RedisClient.initialize()
     
+    # 启动后台定时任务
+    from app.services.task_service import TaskService
+    import asyncio
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # 创建后台任务
+        background_task = asyncio.create_task(TaskService.run_periodic_tasks(interval_minutes=5))
+        logger.info("后台预约自动取消任务已启动")
+        logger.info("规则: 商家超过20分钟未确认的预约将被自动取消，检查间隔: 5分钟")
+    except Exception as e:
+        logger.error(f"启动后台任务失败: {str(e)}")
+    
     yield
     
     # 关闭时清理资源
+    try:
+        if 'background_task' in locals():
+            background_task.cancel()
+            logger.info("后台任务已停止")
+    except Exception as e:
+        logger.error(f"停止后台任务时出错: {str(e)}")
+    
     await RedisClient.close()
 
 
@@ -69,6 +92,7 @@ app.include_router(merchant_router, prefix="/api/v1")
 app.include_router(crew_router, prefix="/api/v1")
 app.include_router(boat_router, prefix="/api/v1")
 app.include_router(product_router, prefix="/api/v1")
+app.include_router(booking_router, prefix="/api/v1")
 
 # 数据库配置
 register_tortoise(

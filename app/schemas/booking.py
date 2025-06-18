@@ -1,0 +1,164 @@
+from pydantic import BaseModel, Field, validator
+from typing import Optional, List
+from datetime import datetime
+from decimal import Decimal
+from app.models.booking import BookingStatus, PaymentStatus
+
+
+class BookingCreateSchema(BaseModel):
+    """创建预约数据验证"""
+    boat_id: int = Field(..., description="船只ID")
+    start_time: datetime = Field(..., description="开始时间")
+    end_time: datetime = Field(..., description="结束时间")
+    passenger_count: int = Field(..., ge=1, le=50, description="乘客人数")
+    contact_name: str = Field(..., min_length=2, max_length=50, description="联系人姓名")
+    contact_phone: str = Field(..., min_length=11, max_length=20, description="联系电话")
+    user_notes: Optional[str] = Field(None, max_length=500, description="用户备注")
+
+    @validator('end_time')
+    def validate_end_time(cls, v, values):
+        if 'start_time' in values and v <= values['start_time']:
+            raise ValueError('结束时间必须晚于开始时间')
+        return v
+
+    @validator('start_time')
+    def validate_start_time(cls, v):
+        if v <= datetime.now():
+            raise ValueError('预约时间必须是未来时间')
+        return v
+
+
+class BookingStatusUpdateSchema(BaseModel):
+    """预约状态更新数据验证"""
+    status: BookingStatus = Field(..., description="预约状态")
+    merchant_notes: Optional[str] = Field(None, max_length=500, description="商家备注")
+    cancel_reason: Optional[str] = Field(None, max_length=500, description="取消原因")
+
+
+class CrewAssignmentSchema(BaseModel):
+    """船员派单数据验证"""
+    booking_id: int = Field(..., description="预约ID")
+    crew_id: int = Field(..., description="船员ID")
+    notes: Optional[str] = Field(None, max_length=500, description="派单备注")
+
+
+class CrewRatingCreateSchema(BaseModel):
+    """船员评价创建数据验证"""
+    booking_id: int = Field(..., description="预约ID")
+    rating: int = Field(..., ge=1, le=5, description="评分(1-5)")
+    comment: Optional[str] = Field(None, max_length=500, description="评价内容")
+
+
+class BookingResponseSchema(BaseModel):
+    """预约响应数据"""
+    id: int = Field(..., description="预约ID")
+    booking_number: str = Field(..., description="预约单号")
+    user_id: int = Field(..., description="用户ID")
+    boat_id: int = Field(..., description="船只ID")
+    merchant_id: int = Field(..., description="商家ID")
+    assigned_crew_id: Optional[int] = Field(None, description="指派船员ID")
+    start_time: datetime = Field(..., description="开始时间")
+    end_time: datetime = Field(..., description="结束时间")
+    duration_hours: float = Field(..., description="预约时长(小时)")
+    passenger_count: int = Field(..., description="乘客人数")
+    hourly_rate: float = Field(..., description="小时费率")
+    total_amount: float = Field(..., description="总金额")
+    status: BookingStatus = Field(..., description="预约状态")
+    payment_status: PaymentStatus = Field(..., description="支付状态")
+    contact_name: str = Field(..., description="联系人姓名")
+    contact_phone: str = Field(..., description="联系电话")
+    user_notes: Optional[str] = Field(None, description="用户备注")
+    merchant_notes: Optional[str] = Field(None, description="商家备注")
+    cancel_reason: Optional[str] = Field(None, description="取消原因")
+    created_at: datetime = Field(..., description="创建时间")
+    updated_at: datetime = Field(..., description="更新时间")
+    confirmed_at: Optional[datetime] = Field(None, description="确认时间")
+    completed_at: Optional[datetime] = Field(None, description="完成时间")
+    cancelled_at: Optional[datetime] = Field(None, description="取消时间")
+
+    class Config:
+        from_attributes = True
+        use_enum_values = True
+
+
+class BookingDetailSchema(BookingResponseSchema):
+    """预约详情数据"""
+    user: Optional[dict] = Field(None, description="用户信息")
+    boat: Optional[dict] = Field(None, description="船只信息")
+    merchant: Optional[dict] = Field(None, description="商家信息")
+    assigned_crew: Optional[dict] = Field(None, description="船员信息")
+    crew_rating: Optional[dict] = Field(None, description="船员评价")
+
+    class Config:
+        from_attributes = True
+        use_enum_values = True
+
+
+class BookingListItemSchema(BaseModel):
+    """预约列表项数据"""
+    id: int = Field(..., description="预约ID")
+    booking_number: str = Field(..., description="预约单号")
+    boat_name: str = Field(..., description="船只名称")
+    start_time: datetime = Field(..., description="开始时间")
+    end_time: datetime = Field(..., description="结束时间")
+    passenger_count: int = Field(..., description="乘客人数")
+    total_amount: float = Field(..., description="总金额")
+    status: BookingStatus = Field(..., description="预约状态")
+    payment_status: PaymentStatus = Field(..., description="支付状态")
+    contact_name: str = Field(..., description="联系人姓名")
+    contact_phone: str = Field(..., description="联系电话")
+    created_at: datetime = Field(..., description="创建时间")
+
+    class Config:
+        from_attributes = True
+        use_enum_values = True
+
+
+class CrewRatingResponseSchema(BaseModel):
+    """船员评价响应数据"""
+    id: int = Field(..., description="评价ID")
+    booking_id: int = Field(..., description="预约ID")
+    user_id: int = Field(..., description="用户ID")
+    crew_id: int = Field(..., description="船员ID")
+    rating: int = Field(..., description="评分")
+    comment: Optional[str] = Field(None, description="评价内容")
+    created_at: datetime = Field(..., description="创建时间")
+
+    class Config:
+        from_attributes = True
+
+
+class BookingQuerySchema(BaseModel):
+    """预约查询参数"""
+    status: Optional[BookingStatus] = Field(None, description="状态过滤")
+    start_date: Optional[datetime] = Field(None, description="开始日期")
+    end_date: Optional[datetime] = Field(None, description="结束日期")
+    boat_id: Optional[int] = Field(None, description="船只ID过滤")
+    user_id: Optional[int] = Field(None, description="用户ID过滤")
+    page: int = Field(1, ge=1, description="页码")
+    page_size: int = Field(10, ge=1, le=100, description="每页数量")
+
+
+class BookingStatsSchema(BaseModel):
+    """预约统计数据"""
+    total_bookings: int = Field(..., description="总预约数")
+    pending_bookings: int = Field(..., description="待确认预约数")
+    confirmed_bookings: int = Field(..., description="已确认预约数")
+    completed_bookings: int = Field(..., description="已完成预约数")
+    cancelled_bookings: int = Field(..., description="已取消预约数")
+    total_revenue: float = Field(..., description="总收入")
+    average_rating: float = Field(..., description="平均评分")
+
+
+class BookingAvailabilityQuerySchema(BaseModel):
+    """船只可用性查询参数"""
+    boat_id: int = Field(..., description="船只ID")
+    start_time: datetime = Field(..., description="开始时间")
+    end_time: datetime = Field(..., description="结束时间")
+
+
+class BookingAvailabilityResponseSchema(BaseModel):
+    """船只可用性响应"""
+    available: bool = Field(..., description="是否可用")
+    reason: Optional[str] = Field(None, description="不可用原因")
+    conflicting_bookings: List[dict] = Field(default=[], description="冲突预约列表") 

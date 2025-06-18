@@ -16,7 +16,7 @@ class JWTManager:
 
     def create_access_token(self, user: User) -> Dict[str, Any]:
         """创建访问令牌"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone(timedelta(hours=8)))
         expire = now + timedelta(minutes=self.access_token_expire_minutes)
         
         payload = {

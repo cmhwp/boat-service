@@ -102,7 +102,9 @@ class ProductService:
             if not product:
                 return ResponseHelper.not_found("商品不存在")
 
-            product_detail = ProductDetailSchema.from_orm(product)
+            # 使用 to_dict 方法正确转换数据
+            product_dict = await product.to_dict()
+            product_detail = ProductDetailSchema(**product_dict)
             return ResponseHelper.success(product_detail, "获取商品详情成功")
 
         except Exception as e:

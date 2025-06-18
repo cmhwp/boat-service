@@ -4,6 +4,7 @@ from .merchant import Merchant, MerchantAudit, MerchantStatus, AuditResult
 from .crew import Crew, CrewApplication, CrewStatus, CrewApplicationStatus
 from .boat import Boat, BoatType, BoatStatus
 from .product import Product, ProductStatus, ProductCategory
+from .booking import BoatBooking, CrewRating, BookingStatus, PaymentStatus
 
 __all__ = [
     "User", "UserRole", "RealnameStatus", 
@@ -11,5 +12,6 @@ __all__ = [
     "Merchant", "MerchantAudit", "MerchantStatus", "AuditResult",
     "Crew", "CrewApplication", "CrewStatus", "CrewApplicationStatus",
     "Boat", "BoatType", "BoatStatus",
-    "Product", "ProductStatus", "ProductCategory"
+    "Product", "ProductStatus", "ProductCategory",
+    "BoatBooking", "CrewRating", "BookingStatus", "PaymentStatus"
 ]
