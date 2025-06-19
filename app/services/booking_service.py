@@ -751,7 +751,13 @@ class BookingService:
                     
                 # 检查是否在服务时间内
                 current_time = datetime.now()
-                if current_time < booking.start_time - timedelta(minutes=30):
+                # 确保时间对象都是 offset-naive 的进行比较
+                booking_start_time = booking.start_time
+                if booking_start_time.tzinfo is not None:
+                    # 如果 booking.start_time 是 offset-aware，转换为本地时间
+                    booking_start_time = booking_start_time.replace(tzinfo=None)
+                
+                if current_time < booking_start_time - timedelta(minutes=30):
                     return ResponseHelper.error("服务开始时间前30分钟才能开始服务", 400)
                     
             elif status_data.status == BookingStatus.COMPLETED:
@@ -810,6 +816,7 @@ class BookingService:
             # 本月统计
             from datetime import date
             current_month_start = datetime(date.today().year, date.today().month, 1)
+            # 使用 Tortoise ORM 的日期范围查询，自动处理时区
             current_month_tasks = await BoatBooking.filter(
                 assigned_crew=crew,
                 created_at__gte=current_month_start
@@ -852,6 +859,7 @@ class BookingService:
             today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             today_end = today_start + timedelta(days=1)
             
+            # 使用 Tortoise ORM 的日期范围查询，避免时区比较问题
             today_bookings = await BoatBooking.filter(
                 assigned_crew=crew,
                 start_time__gte=today_start,
