@@ -14,6 +14,8 @@ from app.routers.crew import router as crew_router
 from app.routers.boat import router as boat_router
 from app.routers.product import router as product_router
 from app.routers.booking import router as booking_router
+from app.routers.cart import router as cart_router
+from app.routers.order import router as order_router
 from app.utils.exception_handlers import (
     http_exception_handler,
     validation_exception_handler,
@@ -93,6 +95,8 @@ app.include_router(crew_router, prefix="/api/v1")
 app.include_router(boat_router, prefix="/api/v1")
 app.include_router(product_router, prefix="/api/v1")
 app.include_router(booking_router, prefix="/api/v1")
+app.include_router(cart_router, prefix="/api/v1")
+app.include_router(order_router, prefix="/api/v1")
 
 # 数据库配置
 register_tortoise(
