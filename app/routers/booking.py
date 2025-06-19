@@ -16,11 +16,16 @@ from app.schemas.booking import (
     BookingStatsSchema,
     BookingAvailabilityQuerySchema,
     BookingAvailabilityResponseSchema,
-    CrewRatingResponseSchema
+    CrewRatingResponseSchema,
+    CrewTaskListItemSchema,
+    CrewTaskDetailSchema,
+    CrewTaskStatusUpdateSchema,
+    CrewTaskQuerySchema,
+    CrewTaskStatsSchema
 )
 from app.schemas.response import ApiResponse, PaginatedData
 from app.services.booking_service import BookingService
-from app.utils.auth import get_current_user, require_merchant, require_admin
+from app.utils.auth import get_current_user, require_merchant, require_admin, require_crew
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -359,4 +364,96 @@ async def manual_auto_cancel_expired_bookings(
         from app.schemas.response import ResponseHelper
         return ResponseHelper.forbidden("需要管理员权限")
     
-    return await BookingService.auto_cancel_expired_bookings() 
+    return await BookingService.auto_cancel_expired_bookings()
+
+
+# =================== 船员端预约管理接口 ===================
+
+@router.get("/crew/tasks", response_model=ApiResponse[PaginatedData[CrewTaskListItemSchema]], summary="获取船员任务列表")
+async def get_crew_tasks(
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(10, description="每页数量", ge=1, le=100),
+    status: Optional[BookingStatus] = Query(None, description="状态过滤"),
+    start_date: Optional[datetime] = Query(None, description="开始日期"),
+    end_date: Optional[datetime] = Query(None, description="结束日期"),
+    current_user: User = Depends(require_crew)
+):
+    """
+    获取船员任务列表（船员端）
+    
+    支持按状态、日期等条件过滤
+    """
+    query_params = CrewTaskQuerySchema(
+        status=status,
+        start_date=start_date,
+        end_date=end_date,
+        page=page,
+        page_size=page_size
+    )
+    return await BookingService.get_crew_tasks(current_user, query_params)
+
+
+@router.get("/crew/tasks/today", response_model=ApiResponse[List[CrewTaskListItemSchema]], summary="获取船员今日任务")
+async def get_crew_today_tasks(
+    current_user: User = Depends(require_crew)
+):
+    """
+    获取船员今日任务列表
+    
+    返回今天需要执行的所有已确认和进行中的任务
+    """
+    return await BookingService.get_crew_today_tasks(current_user)
+
+
+@router.get("/crew/tasks/{booking_id}", response_model=ApiResponse[CrewTaskDetailSchema], summary="获取船员任务详情")
+async def get_crew_task_detail(
+    booking_id: int = Path(..., description="预约任务ID"),
+    current_user: User = Depends(require_crew)
+):
+    """
+    获取船员任务详情
+    
+    包含完整的任务信息、客户信息、船只信息等
+    """
+    return await BookingService.get_crew_task_detail(current_user, booking_id)
+
+
+@router.patch("/crew/tasks/{booking_id}/status", response_model=ApiResponse[BookingResponseSchema], summary="更新任务状态")
+async def update_crew_task_status(
+    booking_id: int = Path(..., description="预约任务ID"),
+    status_data: CrewTaskStatusUpdateSchema = ...,
+    current_user: User = Depends(require_crew)
+):
+    """
+    更新船员任务状态（船员端）
+    
+    - **status**: 任务状态（必填，只能是in_progress或completed）
+    - **notes**: 船员备注（可选）
+    
+    状态转换规则：
+    - confirmed -> in_progress（开始服务）
+    - in_progress -> completed（完成服务）
+    
+    限制条件：
+    - 开始服务：需要在预约时间前30分钟内
+    - 完成服务：只能完成进行中的任务
+    """
+    return await BookingService.update_crew_task_status(current_user, booking_id, status_data)
+
+
+@router.get("/crew/stats", response_model=ApiResponse[CrewTaskStatsSchema], summary="获取船员任务统计")
+async def get_crew_task_stats(
+    current_user: User = Depends(require_crew)
+):
+    """
+    获取船员任务统计数据
+    
+    包括：
+    - 各状态任务数量统计
+    - 总收入和本月收入
+    - 平均评分
+    - 服务完成情况
+    
+    注：收入按60%分成计算
+    """
+    return await BookingService.get_crew_task_stats(current_user) 

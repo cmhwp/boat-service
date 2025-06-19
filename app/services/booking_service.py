@@ -24,7 +24,12 @@ from app.schemas.booking import (
     BookingStatsSchema,
     BookingAvailabilityQuerySchema,
     BookingAvailabilityResponseSchema,
-    CrewRatingResponseSchema
+    CrewRatingResponseSchema,
+    CrewTaskListItemSchema,
+    CrewTaskDetailSchema,
+    CrewTaskStatusUpdateSchema,
+    CrewTaskQuerySchema,
+    CrewTaskStatsSchema
 )
 from app.schemas.response import ResponseHelper, ApiResponse, PaginatedData
 
@@ -382,7 +387,7 @@ class BookingService:
                 return ResponseHelper.not_found("船员不存在或不可用")
 
             # 检查船员时间冲突
-            conflicting_assignments = await BoatBooking.filter(
+            conflicting_assignments = BoatBooking.filter(
                 assigned_crew=crew,
                 status__in=[BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS],
                 start_time__lt=booking.end_time,
@@ -591,4 +596,290 @@ class BookingService:
             return ResponseHelper.success(result, f"成功自动取消 {cancelled_count} 个超过20分钟未确认的预约")
 
         except Exception as e:
-            return ResponseHelper.server_error(f"自动取消预约失败: {str(e)}") 
+            return ResponseHelper.server_error(f"自动取消预约失败: {str(e)}")
+
+    # =================== 船员相关服务方法 ===================
+
+    @staticmethod
+    async def get_crew_tasks(current_user: User, query_params: CrewTaskQuerySchema) -> ApiResponse:
+        """获取船员任务列表"""
+        try:
+            # 检查用户是否是船员
+            from app.models.crew import Crew
+            crew = await Crew.filter(user=current_user, status='active').first()
+            if not crew:
+                return ResponseHelper.forbidden("只有船员可以查看任务列表")
+
+            # 构建查询
+            query = BoatBooking.filter(assigned_crew=crew).select_related('boat', 'user', 'merchant')
+            
+            if query_params.status:
+                query = query.filter(status=query_params.status)
+            if query_params.start_date:
+                query = query.filter(start_time__gte=query_params.start_date)
+            if query_params.end_date:
+                query = query.filter(end_time__lte=query_params.end_date)
+
+            # 分页查询
+            offset = (query_params.page - 1) * query_params.page_size
+            bookings = await query.offset(offset).limit(query_params.page_size).order_by('-created_at')
+            total = await query.count()
+
+            # 转换为响应数据
+            task_list = []
+            for booking in bookings:
+                task_item = CrewTaskListItemSchema(
+                    id=booking.id,
+                    booking_number=booking.booking_number,
+                    boat_name=booking.boat.name,
+                    customer_name=booking.contact_name,
+                    customer_phone=booking.contact_phone,
+                    start_time=booking.start_time,
+                    end_time=booking.end_time,
+                    passenger_count=booking.passenger_count,
+                    total_amount=float(booking.total_amount),
+                    status=booking.status,
+                    user_notes=booking.user_notes,
+                    merchant_notes=booking.merchant_notes,
+                    created_at=booking.created_at
+                )
+                task_list.append(task_item)
+            
+            total_pages = (total + query_params.page_size - 1) // query_params.page_size
+            paginated_data = PaginatedData(
+                items=task_list,
+                total=total,
+                page=query_params.page,
+                page_size=query_params.page_size,
+                total_pages=total_pages
+            )
+
+            return ResponseHelper.success(paginated_data, "获取任务列表成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取任务列表失败: {str(e)}")
+
+    @staticmethod
+    async def get_crew_task_detail(current_user: User, booking_id: int) -> ApiResponse:
+        """获取船员任务详情"""
+        try:
+            # 检查用户是否是船员
+            from app.models.crew import Crew
+            crew = await Crew.filter(user=current_user, status='active').first()
+            if not crew:
+                return ResponseHelper.forbidden("只有船员可以查看任务详情")
+
+            # 获取任务详情
+            booking = await BoatBooking.filter(
+                id=booking_id,
+                assigned_crew=crew
+            ).select_related('boat', 'user', 'merchant').first()
+            
+            if not booking:
+                return ResponseHelper.not_found("任务不存在")
+
+            # 获取评价信息
+            crew_rating = await CrewRating.filter(booking_id=booking.id).first()
+            rating_dict = await crew_rating.to_dict() if crew_rating else None
+
+            # 构建任务详情数据
+            task_detail = CrewTaskDetailSchema(
+                id=booking.id,
+                booking_number=booking.booking_number,
+                boat={
+                    "id": booking.boat.id,
+                    "name": booking.boat.name,
+                    "type": booking.boat.boat_type,
+                    "capacity": booking.boat.capacity,
+                    "license_number": booking.boat.license_number
+                },
+                customer={
+                    "id": booking.user.id,
+                    "name": booking.contact_name,
+                    "phone": booking.contact_phone,
+                    "email": booking.user.email if booking.user else None
+                },
+                merchant={
+                    "id": booking.merchant.id,
+                    "name": booking.merchant.merchant_name,
+                    "contact_phone": booking.merchant.contact_phone
+                },
+                start_time=booking.start_time,
+                end_time=booking.end_time,
+                duration_hours=float(booking.duration_hours),
+                passenger_count=booking.passenger_count,
+                hourly_rate=float(booking.hourly_rate),
+                total_amount=float(booking.total_amount),
+                status=booking.status,
+                payment_status=booking.payment_status,
+                user_notes=booking.user_notes,
+                merchant_notes=booking.merchant_notes,
+                created_at=booking.created_at,
+                confirmed_at=booking.confirmed_at,
+                completed_at=booking.completed_at,
+                crew_rating=rating_dict
+            )
+
+            return ResponseHelper.success(task_detail, "获取任务详情成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取任务详情失败: {str(e)}")
+
+    @staticmethod
+    async def update_crew_task_status(current_user: User, booking_id: int, status_data: CrewTaskStatusUpdateSchema) -> ApiResponse:
+        """更新船员任务状态"""
+        try:
+            # 检查用户是否是船员
+            from app.models.crew import Crew
+            crew = await Crew.filter(user=current_user, status='active').first()
+            if not crew:
+                return ResponseHelper.forbidden("只有船员可以更新任务状态")
+
+            # 获取任务
+            booking = await BoatBooking.filter(
+                id=booking_id,
+                assigned_crew=crew
+            ).first()
+            
+            if not booking:
+                return ResponseHelper.not_found("任务不存在")
+
+            # 验证状态转换
+            if status_data.status == BookingStatus.IN_PROGRESS:
+                if booking.status != BookingStatus.CONFIRMED:
+                    return ResponseHelper.error("只有已确认的任务才能开始服务", 400)
+                    
+                # 检查是否在服务时间内
+                current_time = datetime.now()
+                if current_time < booking.start_time - timedelta(minutes=30):
+                    return ResponseHelper.error("服务开始时间前30分钟才能开始服务", 400)
+                    
+            elif status_data.status == BookingStatus.COMPLETED:
+                if booking.status != BookingStatus.IN_PROGRESS:
+                    return ResponseHelper.error("只有进行中的任务才能完成服务", 400)
+
+            # 更新任务状态
+            booking.status = status_data.status
+            if status_data.notes:
+                booking.merchant_notes = f"{booking.merchant_notes or ''}\n[船员备注] {status_data.notes}".strip()
+            
+            if status_data.status == BookingStatus.COMPLETED:
+                booking.completed_at = datetime.now()
+            
+            await booking.save()
+
+            booking_dict = await booking.to_dict()
+            booking_response = BookingResponseSchema(**booking_dict)
+            
+            status_text = "开始服务" if status_data.status == BookingStatus.IN_PROGRESS else "完成服务"
+            return ResponseHelper.success(booking_response, f"任务{status_text}成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"更新任务状态失败: {str(e)}")
+
+    @staticmethod
+    async def get_crew_task_stats(current_user: User) -> ApiResponse:
+        """获取船员任务统计数据"""
+        try:
+            # 检查用户是否是船员
+            from app.models.crew import Crew
+            crew = await Crew.filter(user=current_user, status='active').first()
+            if not crew:
+                return ResponseHelper.forbidden("只有船员可以查看统计数据")
+
+            # 统计各状态任务数量
+            total_tasks = await BoatBooking.filter(assigned_crew=crew).count()
+            confirmed_tasks = await BoatBooking.filter(assigned_crew=crew, status=BookingStatus.CONFIRMED).count()
+            in_progress_tasks = await BoatBooking.filter(assigned_crew=crew, status=BookingStatus.IN_PROGRESS).count()
+            completed_tasks = await BoatBooking.filter(assigned_crew=crew, status=BookingStatus.COMPLETED).count()
+
+            # 计算总收入（已完成的任务，假设船员分成为60%）
+            completed_bookings = await BoatBooking.filter(
+                assigned_crew=crew,
+                status=BookingStatus.COMPLETED
+            ).all()
+            total_earnings = sum(float(booking.total_amount) * 0.6 for booking in completed_bookings)
+
+            # 计算平均评分
+            ratings = await CrewRating.filter(crew=crew).all()
+            average_rating = 0.0
+            if ratings:
+                total_rating = sum(rating.rating for rating in ratings)
+                average_rating = round(total_rating / len(ratings), 2)
+
+            # 本月统计
+            from datetime import date
+            current_month_start = datetime(date.today().year, date.today().month, 1)
+            current_month_tasks = await BoatBooking.filter(
+                assigned_crew=crew,
+                created_at__gte=current_month_start
+            ).count()
+            
+            current_month_completed = await BoatBooking.filter(
+                assigned_crew=crew,
+                status=BookingStatus.COMPLETED,
+                created_at__gte=current_month_start
+            ).all()
+            current_month_earnings = sum(float(booking.total_amount) * 0.6 for booking in current_month_completed)
+
+            stats = CrewTaskStatsSchema(
+                total_tasks=total_tasks,
+                confirmed_tasks=confirmed_tasks,
+                in_progress_tasks=in_progress_tasks,
+                completed_tasks=completed_tasks,
+                total_earnings=total_earnings,
+                average_rating=average_rating,
+                current_month_tasks=current_month_tasks,
+                current_month_earnings=current_month_earnings
+            )
+
+            return ResponseHelper.success(stats, "获取统计数据成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取统计数据失败: {str(e)}")
+
+    @staticmethod
+    async def get_crew_today_tasks(current_user: User) -> ApiResponse:
+        """获取船员今日任务"""
+        try:
+            # 检查用户是否是船员
+            from app.models.crew import Crew
+            crew = await Crew.filter(user=current_user, status='active').first()
+            if not crew:
+                return ResponseHelper.forbidden("只有船员可以查看今日任务")
+
+            # 获取今日任务
+            today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            today_end = today_start + timedelta(days=1)
+            
+            today_bookings = await BoatBooking.filter(
+                assigned_crew=crew,
+                start_time__gte=today_start,
+                start_time__lt=today_end,
+                status__in=[BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS]
+            ).select_related('boat', 'user', 'merchant').order_by('start_time')
+
+            # 转换为响应数据
+            task_list = []
+            for booking in today_bookings:
+                task_item = CrewTaskListItemSchema(
+                    id=booking.id,
+                    booking_number=booking.booking_number,
+                    boat_name=booking.boat.name,
+                    customer_name=booking.contact_name,
+                    customer_phone=booking.contact_phone,
+                    start_time=booking.start_time,
+                    end_time=booking.end_time,
+                    passenger_count=booking.passenger_count,
+                    total_amount=float(booking.total_amount),
+                    status=booking.status,
+                    user_notes=booking.user_notes,
+                    merchant_notes=booking.merchant_notes,
+                    created_at=booking.created_at
+                )
+                task_list.append(task_item)
+
+            return ResponseHelper.success(task_list, f"获取今日任务成功，共{len(task_list)}个任务")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取今日任务失败: {str(e)}") 
