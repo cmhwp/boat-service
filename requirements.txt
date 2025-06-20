@@ -1,3 +1,4 @@
+# 版本不一定对
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 tortoise-orm[aiomysql]==0.20.0

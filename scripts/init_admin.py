@@ -21,7 +21,7 @@ async def init_admin():
         await Tortoise.init(config=DATABASE_CONFIG)
         
         # 检查管理员是否已存在
-        admin_exists = await User.filter(username="admin1").first()
+        admin_exists = await User.filter(username="admin").first()
         if admin_exists:
             print("❌ 管理员账户 admin1 已存在")
             return
