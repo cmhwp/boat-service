@@ -9,6 +9,7 @@ from app.schemas.order import (
     DirectOrderCreateSchema,
     PaymentCreateSchema,
     OrderStatusUpdateSchema,
+    OrderConfirmReceiptSchema,
     OrderQuerySchema,
     OrderResponseSchema,
     OrderDetailSchema,
@@ -149,6 +150,31 @@ async def cancel_order(
     return await OrderService.cancel_order(current_user, order_id, cancel_reason)
 
 
+@router.patch("/{order_id}/confirm-receipt", response_model=ApiResponse[OrderResponseSchema], summary="确认收货")
+async def confirm_receipt(
+    order_id: int = Path(..., description="订单ID"),
+    user_notes: Optional[str] = Body(None, description="用户备注"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    用户确认收货
+    
+    - **order_id**: 订单ID（路径参数）
+    - **user_notes**: 用户备注（可选）
+    
+    限制条件：
+    - 只能确认已送达状态的订单
+    - 只能确认自己的订单
+    - 确认收货后订单状态变为已完成
+    
+    业务说明：
+    - 确认收货是订单流程的最后一步
+    - 确认后订单不可再修改状态
+    - 可以添加收货备注（如商品质量、服务评价等）
+    """
+    return await OrderService.confirm_receipt(current_user, order_id, user_notes)
+
+
 # =================== 商家端订单管理接口 ===================
 
 @router.get("/merchant/list", response_model=ApiResponse[PaginatedData[OrderDetailSchema]], summary="获取商家订单列表")
@@ -177,6 +203,38 @@ async def get_merchant_orders(
     return await OrderService.get_merchant_orders(current_user, query_params)
 
 
+@router.get("/merchant/stats", response_model=ApiResponse[OrderStatsSchema], summary="获取订单统计")
+async def get_order_stats(
+    current_user: User = Depends(require_merchant)
+):
+    """
+    获取商家订单统计
+    
+    包含各状态订单数量、金额统计等
+    """
+    return await OrderService.get_order_stats(current_user)
+
+
+@router.get("/merchant/{order_id}", response_model=ApiResponse[OrderDetailSchema], summary="获取商家订单详情")
+async def get_merchant_order_detail(
+    order_id: int = Path(..., description="订单ID"),
+    current_user: User = Depends(require_merchant)
+):
+    """
+    获取商家订单详情（商家端）
+    
+    - **order_id**: 订单ID
+    
+    只能查看属于当前商家的订单详情，包含：
+    - 完整的订单信息
+    - 用户信息
+    - 订单项目详情
+    - 支付信息
+    - 物流状态等
+    """
+    return await OrderService.get_merchant_order_detail(current_user, order_id)
+
+
 @router.patch("/{order_id}/status", response_model=ApiResponse[OrderResponseSchema], summary="更新订单状态")
 async def update_order_status(
     order_id: int = Path(..., description="订单ID"),
@@ -198,18 +256,6 @@ async def update_order_status(
     取消已支付订单会自动恢复库存
     """
     return await OrderService.update_order_status(current_user, order_id, status_data)
-
-
-@router.get("/merchant/stats", response_model=ApiResponse[OrderStatsSchema], summary="获取订单统计")
-async def get_order_stats(
-    current_user: User = Depends(require_merchant)
-):
-    """
-    获取商家订单统计
-    
-    包含各状态订单数量、金额统计等
-    """
-    return await OrderService.get_order_stats(current_user)
 
 
 # =================== 管理员端订单管理接口 ===================

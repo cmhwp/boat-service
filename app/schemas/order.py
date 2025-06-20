@@ -86,6 +86,11 @@ class OrderStatusUpdateSchema(BaseModel):
         return v
 
 
+class OrderConfirmReceiptSchema(BaseModel):
+    """用户确认收货数据验证"""
+    user_notes: Optional[str] = Field(None, max_length=500, description="用户备注")
+
+
 class OrderQuerySchema(BaseModel):
     """订单查询数据验证"""
     status: Optional[OrderStatus] = Field(None, description="状态过滤")

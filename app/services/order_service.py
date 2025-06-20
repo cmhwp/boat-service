@@ -15,6 +15,7 @@ from app.schemas.order import (
     DirectOrderCreateSchema,
     PaymentCreateSchema,
     OrderStatusUpdateSchema,
+    OrderConfirmReceiptSchema,
     OrderQuerySchema,
     OrderResponseSchema,
     OrderDetailSchema,
@@ -401,6 +402,37 @@ class OrderService:
             return ResponseHelper.server_error(f"取消订单失败: {str(e)}")
 
     @staticmethod
+    async def confirm_receipt(current_user: User, order_id: int, user_notes: Optional[str] = None) -> ApiResponse:
+        """用户确认收货"""
+        try:
+            async with transactions.in_transaction():
+                order = await Order.filter(
+                    id=order_id,
+                    user=current_user
+                ).first()
+                
+                if not order:
+                    return ResponseHelper.not_found("订单不存在")
+                
+                # 只有已送达状态的订单可以确认收货
+                if order.status != OrderStatus.DELIVERED:
+                    return ResponseHelper.error("当前状态的订单无法确认收货", 400)
+                
+                # 更新订单状态为已完成
+                order.status = OrderStatus.COMPLETED
+                order.completed_at = datetime.now()
+                if user_notes:
+                    order.user_notes = user_notes
+                await order.save()
+                
+                order_dict = await order.to_dict()
+                order_response = OrderResponseSchema(**order_dict)
+                return ResponseHelper.success(order_response, "确认收货成功，订单已完成")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"确认收货失败: {str(e)}")
+
+    @staticmethod
     async def get_merchant_orders(current_user: User, query_params: OrderQuerySchema) -> ApiResponse:
         """获取商家订单列表"""
         try:
@@ -446,6 +478,30 @@ class OrderService:
 
         except Exception as e:
             return ResponseHelper.server_error(f"获取订单列表失败: {str(e)}")
+
+    @staticmethod
+    async def get_merchant_order_detail(current_user: User, order_id: int) -> ApiResponse:
+        """获取商家订单详情"""
+        try:
+            # 检查用户是否是商家
+            merchant = await Merchant.filter(user_id=current_user.id).first()
+            if not merchant:
+                return ResponseHelper.forbidden("用户不是商家")
+
+            order = await Order.filter(
+                id=order_id,
+                merchant=merchant
+            ).select_related('merchant', 'user').first()
+            
+            if not order:
+                return ResponseHelper.not_found("订单不存在")
+
+            order_dict = await order.to_dict()
+            order_detail = OrderDetailSchema(**order_dict)
+            return ResponseHelper.success(order_detail, "获取订单详情成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取订单详情失败: {str(e)}")
 
     @staticmethod
     async def update_order_status(current_user: User, order_id: int, status_data: OrderStatusUpdateSchema) -> ApiResponse:
