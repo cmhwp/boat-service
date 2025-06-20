@@ -15,7 +15,9 @@ from app.schemas.user import (
     CompleteRegistrationSchema,
     ForgotPasswordSchema,
     ResetPasswordSchema,
-    VerificationCodeResponseSchema
+    VerificationCodeResponseSchema,
+    UserInfoByRoleSchema,
+    UserInfoQuerySchema
 )
 from app.schemas.response import ResponseHelper, ApiResponse, PaginatedData
 from app.utils.jwt_utils import jwt_manager
@@ -401,10 +403,103 @@ class UserService:
     async def logout(user: User) -> ApiResponse[dict]:
         """用户退出登录"""
         try:
-            # 简单的退出登录，主要在前端清除token
-            return ResponseHelper.success(
-                {"logout": True}, 
-                "退出登录成功"
-            )
+            # 这里可以添加token黑名单逻辑
+            # 目前只是简单返回成功消息
+            return ResponseHelper.success({"message": "退出登录成功"}, "退出登录成功")
+            
         except Exception as e:
-            return ResponseHelper.server_error(f"退出登录失败: {str(e)}") 
+            return ResponseHelper.server_error(f"退出登录失败: {str(e)}")
+
+    @staticmethod
+    async def get_user_info_by_merchant_id(merchant_id: int) -> ApiResponse[dict]:
+        """根据商家ID获取用户信息"""
+        try:
+            from app.models.merchant import Merchant
+            
+            # 查找商家
+            merchant = await Merchant.get_or_none(id=merchant_id).select_related('user')
+            if not merchant:
+                return ResponseHelper.not_found("商家不存在")
+            
+            user = merchant.user
+            if not user:
+                return ResponseHelper.not_found("商家关联的用户不存在")
+            
+            # 构建响应数据
+            user_info = {
+                "id": user.id,
+                "username": user.username,
+                "avatar": user.avatar,
+                "phone": user.phone,
+                "email": user.email,
+                "role": user.role,
+                "realname_status": user.realname_status,
+                "created_at": user.created_at,
+                "merchant_id": merchant.id,
+                "merchant_name": merchant.merchant_name,
+                "merchant_status": merchant.status,
+                "contact_phone": merchant.contact_phone,
+                "address": merchant.address
+            }
+            
+            return ResponseHelper.success(user_info, "获取商家用户信息成功")
+            
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取商家用户信息失败: {str(e)}")
+
+    @staticmethod
+    async def get_user_info_by_crew_id(crew_id: int) -> ApiResponse[dict]:
+        """根据船员ID获取用户信息"""
+        try:
+            from app.models.crew import Crew
+            
+            # 查找船员
+            crew = await Crew.get_or_none(id=crew_id).select_related('user', 'merchant')
+            if not crew:
+                return ResponseHelper.not_found("船员不存在")
+            
+            user = crew.user
+            if not user:
+                return ResponseHelper.not_found("船员关联的用户不存在")
+            
+            # 构建响应数据
+            user_info = {
+                "id": user.id,
+                "username": user.username,
+                "avatar": user.avatar,
+                "phone": user.phone,
+                "email": user.email,
+                "role": user.role,
+                "realname_status": user.realname_status,
+                "created_at": user.created_at,
+                "crew_id": crew.id,
+                "boat_license": crew.boat_license,
+                "crew_status": crew.status,
+                "rating": float(crew.rating),
+                "join_time": crew.join_time,
+                "merchant_id": crew.merchant.id if crew.merchant else None,
+                "merchant_name": crew.merchant.merchant_name if crew.merchant else None
+            }
+            
+            return ResponseHelper.success(user_info, "获取船员用户信息成功")
+            
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取船员用户信息失败: {str(e)}")
+
+    @staticmethod
+    async def get_user_info_by_role(merchant_id: Optional[int] = None, crew_id: Optional[int] = None) -> ApiResponse[dict]:
+        """根据商家ID或船员ID获取用户信息"""
+        try:
+            if not merchant_id and not crew_id:
+                return ResponseHelper.error("必须提供merchant_id或crew_id中的至少一个", 400)
+            
+            if merchant_id and crew_id:
+                return ResponseHelper.error("只能提供merchant_id或crew_id中的一个", 400)
+            
+            if merchant_id:
+                return await UserService.get_user_info_by_merchant_id(merchant_id)
+            else:
+                return await UserService.get_user_info_by_crew_id(crew_id)
+                
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取用户信息失败: {str(e)}") 

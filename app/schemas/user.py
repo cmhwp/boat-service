@@ -184,4 +184,47 @@ class UploadResponseSchema(BaseModel):
     url: str
     filename: str
     size: int
-    content_type: str 
+    content_type: str
+
+
+class UserInfoByRoleSchema(BaseModel):
+    """根据角色获取的用户信息schema"""
+    id: int
+    username: str
+    avatar: Optional[str]
+    phone: Optional[str]
+    email: str
+    role: UserRole
+    realname_status: RealnameStatus
+    created_at: datetime
+    
+    # 商家信息（如果是商家）
+    merchant_id: Optional[int] = None
+    merchant_name: Optional[str] = None
+    merchant_status: Optional[str] = None
+    contact_phone: Optional[str] = None
+    address: Optional[str] = None
+    
+    # 船员信息（如果是船员）
+    crew_id: Optional[int] = None
+    boat_license: Optional[str] = None
+    crew_status: Optional[str] = None
+    rating: Optional[float] = None
+    join_time: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+        use_enum_values = True
+
+
+class UserInfoQuerySchema(BaseModel):
+    """用户信息查询参数schema"""
+    merchant_id: Optional[int] = None
+    crew_id: Optional[int] = None
+    
+    @validator('merchant_id', 'crew_id')
+    def validate_ids(cls, v, values):
+        # 确保至少提供一个ID
+        if not v and not values.get('merchant_id') and not values.get('crew_id'):
+            raise ValueError('必须提供merchant_id或crew_id中的至少一个')
+        return v 

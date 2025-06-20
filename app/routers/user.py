@@ -13,7 +13,9 @@ from app.schemas.user import (
     ForgotPasswordSchema,
     ResetPasswordSchema,
     VerificationCodeResponseSchema,
-    UploadResponseSchema
+    UploadResponseSchema,
+    UserInfoByRoleSchema,
+    UserInfoQuerySchema
 )
 from app.schemas.response import ApiResponse, ResponseHelper, DictResponse, PaginatedData
 from app.services.user_service import UserService
@@ -216,5 +218,52 @@ async def upload_avatar(
 
 @router.delete("/avatar", response_model=ApiResponse[dict], summary="删除用户头像")
 async def delete_avatar(current_user: User = Depends(get_current_user)):
-    """删除当前用户的头像"""
-    return await UserService.delete_avatar(current_user) 
+    """删除用户头像"""
+    return await UserService.delete_avatar(current_user)
+
+
+@router.get("/info/by-merchant", response_model=ApiResponse[dict], summary="根据商家ID获取用户信息")
+async def get_user_info_by_merchant(
+    merchant_id: int = Query(..., description="商家ID"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    根据商家ID获取用户信息
+    
+    - **merchant_id**: 商家ID
+    
+    返回商家关联的用户信息，包括头像、用户名和商家详细信息
+    """
+    return await UserService.get_user_info_by_merchant_id(merchant_id)
+
+
+@router.get("/info/by-crew", response_model=ApiResponse[dict], summary="根据船员ID获取用户信息")
+async def get_user_info_by_crew(
+    crew_id: int = Query(..., description="船员ID"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    根据船员ID获取用户信息
+    
+    - **crew_id**: 船员ID
+    
+    返回船员关联的用户信息，包括头像、用户名和船员详细信息
+    """
+    return await UserService.get_user_info_by_crew_id(crew_id)
+
+
+@router.get("/info/by-role", response_model=ApiResponse[dict], summary="根据角色ID获取用户信息")
+async def get_user_info_by_role(
+    merchant_id: Optional[int] = Query(None, description="商家ID"),
+    crew_id: Optional[int] = Query(None, description="船员ID"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    根据商家ID或船员ID获取用户信息
+    
+    - **merchant_id**: 商家ID（与crew_id二选一）
+    - **crew_id**: 船员ID（与merchant_id二选一）
+    
+    返回对应角色的用户信息，包括头像、用户名和角色详细信息
+    """
+    return await UserService.get_user_info_by_role(merchant_id=merchant_id, crew_id=crew_id) 
