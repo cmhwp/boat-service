@@ -368,7 +368,7 @@ class BoatService:
             for booking in recent_bookings:
                 booking_data = {
                     "id": booking.id,
-                    "user_name": booking.user.nickname or booking.user.username if booking.user else "未知用户",
+                    "user_name": booking.user.username if booking.user else "未知用户",
                     "start_time": booking.start_time,
                     "end_time": booking.end_time,
                     "status": booking.status,

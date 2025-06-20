@@ -451,7 +451,7 @@ class ProductService:
                 order_data = {
                     "order_id": item.order.id,
                     "order_number": item.order.order_number,
-                    "user_name": item.order.user.nickname or item.order.user.username if item.order.user else "未知用户",
+                    "user_name": item.order.user.username if item.order.user else "未知用户",
                     "quantity": item.quantity,
                     "total_price": float(item.total_price),
                     "order_status": item.order.status,

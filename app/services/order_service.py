@@ -591,7 +591,7 @@ class OrderService:
                 return ResponseHelper.forbidden("只有管理员才能访问此功能")
             
             # 构建查询
-            query = Order.all().select_related('user', 'merchant', 'payment_records')
+            query = Order.all().select_related('user', 'merchant')
             
             if query_params.status:
                 query = query.filter(status=query_params.status)
@@ -618,14 +618,16 @@ class OrderService:
                 merchant_name = order.merchant.merchant_name if order.merchant else "未知商家"
                 
                 # 获取用户信息
-                user_name = order.user.nickname or order.user.username if order.user else "未知用户"
+                user_name = order.user.username if order.user else "未知用户"
                 user_phone = order.user.phone if order.user else None
                 
                 # 获取支付信息
                 payment_method = None
                 paid_at = None
-                if order.payment_records:
-                    successful_payment = next((p for p in order.payment_records if p.is_success), None)
+                # 单独查询支付记录
+                payment_records = await PaymentRecord.filter(order_id=order.id)
+                if payment_records:
+                    successful_payment = next((p for p in payment_records if p.is_success), None)
                     if successful_payment:
                         payment_method = successful_payment.payment_method
                         paid_at = successful_payment.paid_at
