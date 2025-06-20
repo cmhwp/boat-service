@@ -198,4 +198,48 @@ class OrderStatsSchema(BaseModel):
     paid_amount: float = Field(..., description="已支付金额")
     
     class Config:
+        from_attributes = True
+
+
+# =================== 管理员相关模式 ===================
+
+class AdminOrderQuerySchema(BaseModel):
+    """管理员订单查询数据验证"""
+    status: Optional[OrderStatus] = Field(None, description="状态过滤")
+    start_date: Optional[datetime] = Field(None, description="开始日期")
+    end_date: Optional[datetime] = Field(None, description="结束日期")
+    merchant_id: Optional[int] = Field(None, description="商家ID过滤")
+    user_id: Optional[int] = Field(None, description="用户ID过滤")
+    order_number: Optional[str] = Field(None, description="订单号搜索")
+    page: int = Field(1, ge=1, description="页码")
+    page_size: int = Field(10, ge=1, le=100, description="每页数量")
+
+
+class AdminOrderDetailSchema(OrderDetailSchema):
+    """管理员订单详情数据"""
+    payment_records: List[PaymentResponseSchema] = Field(default=[], description="支付记录列表")
+
+
+class AdminOrderOperationSchema(BaseModel):
+    """管理员订单操作数据验证"""
+    operation: str = Field(..., description="操作类型：force_cancel（强制取消）| refund（退款）")
+    reason: str = Field(..., min_length=5, max_length=500, description="操作原因")
+    notes: Optional[str] = Field(None, max_length=500, description="管理员备注")
+
+    @validator('operation')
+    def validate_operation(cls, v):
+        allowed_operations = ['force_cancel', 'refund']
+        if v not in allowed_operations:
+            raise ValueError(f'操作类型必须是: {", ".join(allowed_operations)}')
+        return v
+
+
+class AdminOrderListItemSchema(OrderListItemSchema):
+    """管理员订单列表项数据"""
+    user_name: str = Field(..., description="用户名")
+    user_phone: Optional[str] = Field(None, description="用户电话")
+    payment_method: Optional[PaymentMethod] = Field(None, description="支付方式")
+    paid_at: Optional[datetime] = Field(None, description="支付时间")
+
+    class Config:
         from_attributes = True 

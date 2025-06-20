@@ -20,9 +20,13 @@ from app.schemas.order import (
     OrderDetailSchema,
     OrderListItemSchema,
     PaymentResponseSchema,
-    OrderStatsSchema
+    OrderStatsSchema,
+    AdminOrderQuerySchema,
+    AdminOrderListItemSchema,
+    AdminOrderDetailSchema
 )
 from app.schemas.response import ResponseHelper, ApiResponse, PaginatedData
+from app.models.user import UserRole
 
 
 class OrderService:
@@ -572,6 +576,229 @@ class OrderService:
             
             order_stats = OrderStatsSchema(**stats)
             return ResponseHelper.success(order_stats, "获取订单统计成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取订单统计失败: {str(e)}")
+
+    # =================== 管理员相关方法 ===================
+
+    @staticmethod
+    async def admin_get_all_orders(current_user: User, query_params) -> ApiResponse:
+        """管理员获取所有订单列表"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+            
+            # 构建查询
+            query = Order.all().select_related('user', 'merchant', 'payment_records')
+            
+            if query_params.status:
+                query = query.filter(status=query_params.status)
+            if query_params.start_date:
+                query = query.filter(created_at__gte=query_params.start_date)
+            if query_params.end_date:
+                query = query.filter(created_at__lte=query_params.end_date)
+            if query_params.merchant_id:
+                query = query.filter(merchant_id=query_params.merchant_id)
+            if query_params.user_id:
+                query = query.filter(user_id=query_params.user_id)
+            if query_params.order_number:
+                query = query.filter(order_number__icontains=query_params.order_number)
+
+            # 分页查询
+            offset = (query_params.page - 1) * query_params.page_size
+            orders = await query.offset(offset).limit(query_params.page_size).order_by('-created_at')
+            total = await query.count()
+
+            # 转换为响应数据
+            order_list = []
+            for order in orders:
+                # 获取商家名称
+                merchant_name = order.merchant.merchant_name if order.merchant else "未知商家"
+                
+                # 获取用户信息
+                user_name = order.user.nickname or order.user.username if order.user else "未知用户"
+                user_phone = order.user.phone if order.user else None
+                
+                # 获取支付信息
+                payment_method = None
+                paid_at = None
+                if order.payment_records:
+                    successful_payment = next((p for p in order.payment_records if p.is_success), None)
+                    if successful_payment:
+                        payment_method = successful_payment.payment_method
+                        paid_at = successful_payment.paid_at
+                
+                # 计算订单项统计
+                order_items_count = await OrderItem.filter(order_id=order.id).count()
+                total_quantity = await OrderItem.filter(order_id=order.id).values('quantity')
+                total_quantity = sum(item['quantity'] for item in total_quantity)
+                
+                order_data = {
+                    "id": order.id,
+                    "order_number": order.order_number,
+                    "merchant_id": order.merchant_id,
+                    "merchant_name": merchant_name,
+                    "total_amount": float(order.total_amount),
+                    "final_amount": float(order.final_amount),
+                    "status": order.status,
+                    "item_count": order_items_count,
+                    "total_quantity": total_quantity,
+                    "created_at": order.created_at,
+                    "user_name": user_name,
+                    "user_phone": user_phone,
+                    "payment_method": payment_method,
+                    "paid_at": paid_at
+                }
+                
+                order_list.append(order_data)
+            
+            total_pages = (total + query_params.page_size - 1) // query_params.page_size
+            paginated_data = PaginatedData(
+                items=order_list,
+                total=total,
+                page=query_params.page,
+                page_size=query_params.page_size,
+                total_pages=total_pages
+            )
+
+            return ResponseHelper.success(paginated_data, "获取订单列表成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取订单列表失败: {str(e)}")
+
+    @staticmethod
+    async def admin_get_order_detail(current_user: User, order_id: int) -> ApiResponse:
+        """管理员获取订单详情"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+            
+            # 获取订单详情
+            order = await Order.filter(id=order_id).select_related('user', 'merchant').first()
+            if not order:
+                return ResponseHelper.not_found("订单不存在")
+
+            # 获取支付记录
+            payment_records = await PaymentRecord.filter(order_id=order_id)
+            
+            # 转换为详情数据
+            order_dict = await order.to_dict()
+            
+            # 添加支付记录
+            payment_data = []
+            for payment in payment_records:
+                payment_dict = await payment.to_dict()
+                payment_data.append(payment_dict)
+            
+            order_dict['payment_records'] = payment_data
+            
+            order_detail = AdminOrderDetailSchema(**order_dict)
+            return ResponseHelper.success(order_detail, "获取订单详情成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取订单详情失败: {str(e)}")
+
+    @staticmethod
+    async def admin_operate_order(current_user: User, order_id: int, operation_data) -> ApiResponse:
+        """管理员操作订单"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+            
+            async with transactions.in_transaction():
+                order = await Order.get(id=order_id)
+                
+                if operation_data.operation == "force_cancel":
+                    # 强制取消订单
+                    if order.status in [OrderStatus.COMPLETED, OrderStatus.CANCELLED]:
+                        return ResponseHelper.error("订单已完成或已取消，无法操作", 400)
+                    
+                    # 如果是已支付订单，需要恢复库存
+                    if order.status in [OrderStatus.PAID, OrderStatus.SHIPPED, OrderStatus.DELIVERED]:
+                        await OrderService._restore_product_stock(order_id)
+                    
+                    order.status = OrderStatus.CANCELLED
+                    order.cancelled_at = datetime.now()
+                    order.cancel_reason = f"管理员强制取消：{operation_data.reason}"
+                    if operation_data.notes:
+                        order.merchant_notes = f"管理员备注：{operation_data.notes}"
+                    
+                elif operation_data.operation == "refund":
+                    # 处理退款
+                    if order.status != OrderStatus.PAID:
+                        return ResponseHelper.error("只有已支付的订单才能退款", 400)
+                    
+                    # 恢复库存
+                    await OrderService._restore_product_stock(order_id)
+                    
+                    order.status = OrderStatus.REFUNDED
+                    order.cancel_reason = f"管理员退款：{operation_data.reason}"
+                    if operation_data.notes:
+                        order.merchant_notes = f"管理员备注：{operation_data.notes}"
+                
+                await order.save()
+                
+                order_dict = await order.to_dict()
+                from app.schemas.order import OrderResponseSchema
+                order_response = OrderResponseSchema(**order_dict)
+                return ResponseHelper.success(order_response, f"订单操作成功")
+
+        except DoesNotExist:
+            return ResponseHelper.not_found("订单不存在")
+        except Exception as e:
+            return ResponseHelper.server_error(f"订单操作失败: {str(e)}")
+
+    @staticmethod
+    async def admin_get_order_statistics(current_user: User) -> ApiResponse:
+        """管理员获取全平台订单统计"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+
+            # 获取所有订单
+            all_orders = await Order.all()
+            
+            stats = {
+                "total_orders": len(all_orders),
+                "pending_orders": 0,
+                "paid_orders": 0,
+                "shipped_orders": 0,
+                "completed_orders": 0,
+                "cancelled_orders": 0,
+                "refunded_orders": 0,
+                "total_amount": 0.0,
+                "paid_amount": 0.0
+            }
+            
+            for order in all_orders:
+                stats["total_amount"] += float(order.final_amount)
+                
+                if order.status == OrderStatus.PENDING:
+                    stats["pending_orders"] += 1
+                elif order.status == OrderStatus.PAID:
+                    stats["paid_orders"] += 1
+                    stats["paid_amount"] += float(order.final_amount)
+                elif order.status == OrderStatus.SHIPPED:
+                    stats["shipped_orders"] += 1
+                    stats["paid_amount"] += float(order.final_amount)
+                elif order.status == OrderStatus.COMPLETED:
+                    stats["completed_orders"] += 1
+                    stats["paid_amount"] += float(order.final_amount)
+                elif order.status == OrderStatus.CANCELLED:
+                    stats["cancelled_orders"] += 1
+                elif order.status == OrderStatus.REFUNDED:
+                    stats["refunded_orders"] += 1
+            
+            # 添加管理员特有的统计信息
+            stats["platform_commission"] = stats["paid_amount"] * 0.05  # 假设平台抽成5%
+            stats["merchant_revenue"] = stats["paid_amount"] * 0.95
+            
+            return ResponseHelper.success(stats, "获取平台订单统计成功")
 
         except Exception as e:
             return ResponseHelper.server_error(f"获取订单统计失败: {str(e)}") 

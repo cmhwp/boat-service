@@ -245,4 +245,63 @@ class CrewTaskStatsSchema(BaseModel):
     total_earnings: float = Field(..., description="总收入")
     average_rating: float = Field(..., description="平均评分")
     current_month_tasks: int = Field(..., description="本月任务数")
-    current_month_earnings: float = Field(..., description="本月收入") 
+    current_month_earnings: float = Field(..., description="本月收入")
+
+
+# =================== 支付相关数据模式 ===================
+
+class PaymentRequestSchema(BaseModel):
+    """支付请求数据验证"""
+    booking_id: int = Field(..., description="预约ID")
+    payment_method: str = Field("simulate", description="支付方式（模拟支付）")
+    payment_notes: Optional[str] = Field(None, max_length=200, description="支付备注")
+
+
+class PaymentResponseSchema(BaseModel):
+    """支付响应数据"""
+    booking_id: int = Field(..., description="预约ID")
+    booking_number: str = Field(..., description="预约单号")
+    total_amount: float = Field(..., description="支付金额")
+    payment_status: str = Field(..., description="支付状态")
+    payment_time: datetime = Field(..., description="支付时间")
+    payment_method: str = Field(..., description="支付方式")
+    payment_notes: Optional[str] = Field(None, description="支付备注")
+
+    class Config:
+        from_attributes = True
+        use_enum_values = True
+
+
+class RefundRequestSchema(BaseModel):
+    """退款请求数据验证"""
+    booking_id: int = Field(..., description="预约ID")
+    refund_reason: str = Field(..., min_length=5, max_length=500, description="退款原因")
+
+
+class RefundResponseSchema(BaseModel):
+    """退款响应数据"""
+    booking_id: int = Field(..., description="预约ID")
+    booking_number: str = Field(..., description="预约单号")
+    refund_amount: float = Field(..., description="退款金额")
+    refund_status: str = Field(..., description="退款状态")
+    refund_time: datetime = Field(..., description="退款时间")
+    refund_reason: str = Field(..., description="退款原因")
+
+    class Config:
+        from_attributes = True
+        use_enum_values = True
+
+
+class PaymentStatusResponseSchema(BaseModel):
+    """支付状态查询响应"""
+    booking_id: int = Field(..., description="预约ID")
+    booking_number: str = Field(..., description="预约单号")
+    total_amount: float = Field(..., description="订单金额")
+    payment_status: str = Field(..., description="支付状态")
+    booking_status: str = Field(..., description="预约状态")
+    created_at: datetime = Field(..., description="创建时间")
+    payment_time: Optional[datetime] = Field(None, description="支付时间")
+
+    class Config:
+        from_attributes = True
+        use_enum_values = True 

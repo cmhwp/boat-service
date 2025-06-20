@@ -11,7 +11,11 @@ from app.schemas.product import (
     ProductDetailSchema,
     ProductListItemSchema,
     ProductStockUpdateSchema,
-    ProductSearchSchema
+    ProductSearchSchema,
+    AdminProductQuerySchema,
+    AdminProductOperationSchema,
+    AdminProductListItemSchema,
+    AdminProductDetailSchema
 )
 from app.schemas.response import ResponseHelper, ApiResponse, PaginatedData
 
@@ -306,9 +310,9 @@ class ProductService:
 
     @staticmethod
     async def get_popular_products(page: int = 1, page_size: int = 10) -> ApiResponse:
-        """获取热门商品"""
+        """获取热门商品（用户端）"""
         try:
-            # 构建查询条件，按销量排序
+            # 构建查询 - 按销量降序排列
             query = Product.filter(
                 status=ProductStatus.AVAILABLE,
                 merchant__status=MerchantStatus.ACTIVE
@@ -337,4 +341,238 @@ class ProductService:
             return ResponseHelper.success(paginated_data, "获取热门商品成功")
 
         except Exception as e:
-            return ResponseHelper.server_error(f"获取热门商品失败: {str(e)}") 
+            return ResponseHelper.server_error(f"获取热门商品失败: {str(e)}")
+
+    # =================== 管理员相关方法 ===================
+
+    @staticmethod
+    async def admin_get_all_products(current_user: User, query_params: AdminProductQuerySchema) -> ApiResponse:
+        """管理员获取所有商品列表"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+            
+            # 构建查询
+            query = Product.all().select_related('merchant')
+            
+            if query_params.merchant_id:
+                query = query.filter(merchant_id=query_params.merchant_id)
+            if query_params.category:
+                query = query.filter(category=query_params.category)
+            if query_params.status:
+                query = query.filter(status=query_params.status)
+            if query_params.name:
+                query = query.filter(name__icontains=query_params.name)
+            if query_params.min_price:
+                query = query.filter(price__gte=query_params.min_price)
+            if query_params.max_price:
+                query = query.filter(price__lte=query_params.max_price)
+            if query_params.low_stock:
+                query = query.filter(stock__lt=10)
+
+            # 分页查询
+            offset = (query_params.page - 1) * query_params.page_size
+            products = await query.offset(offset).limit(query_params.page_size).order_by('-created_at')
+            total = await query.count()
+
+            # 转换为响应数据
+            product_list = []
+            for product in products:
+                # 获取商家名称
+                merchant_name = product.merchant.merchant_name if product.merchant else "未知商家"
+                
+                # 统计订单数据
+                from app.models.order import OrderItem
+                order_items = await OrderItem.filter(product_id=product.id).select_related('order')
+                order_count = len(set(item.order_id for item in order_items))
+                total_sales = sum(float(item.total_price) for item in order_items if item.order.status in ['completed', 'delivered'])
+                
+                product_data = {
+                    "id": product.id,
+                    "merchant_id": product.merchant_id,
+                    "name": product.name,
+                    "category": product.category,
+                    "price": float(product.price),
+                    "stock": product.stock,
+                    "unit": product.unit,
+                    "images": product.images,
+                    "rating": float(product.rating),
+                    "sales_count": product.sales_count,
+                    "status": product.status,
+                    "created_at": product.created_at,
+                    "merchant_name": merchant_name,
+                    "order_count": order_count,
+                    "total_sales": total_sales
+                }
+                
+                product_list.append(product_data)
+            
+            total_pages = (total + query_params.page_size - 1) // query_params.page_size
+            paginated_data = PaginatedData(
+                items=product_list,
+                total=total,
+                page=query_params.page,
+                page_size=query_params.page_size,
+                total_pages=total_pages
+            )
+
+            return ResponseHelper.success(paginated_data, "获取商品列表成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取商品列表失败: {str(e)}")
+
+    @staticmethod
+    async def admin_get_product_detail(current_user: User, product_id: int) -> ApiResponse:
+        """管理员获取商品详情"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+            
+            # 获取商品详情
+            product = await Product.filter(id=product_id).select_related('merchant').first()
+            if not product:
+                return ResponseHelper.not_found("商品不存在")
+
+            # 获取订单统计数据
+            from app.models.order import OrderItem
+            order_items = await OrderItem.filter(product_id=product.id).select_related('order')
+            order_count = len(set(item.order_id for item in order_items))
+            total_sales = sum(float(item.total_price) for item in order_items if item.order.status in ['completed', 'delivered'])
+            
+            # 获取最近的订单记录
+            recent_order_items = await OrderItem.filter(
+                product_id=product.id
+            ).select_related('order', 'order__user').order_by('-created_at').limit(5)
+            
+            recent_order_data = []
+            for item in recent_order_items:
+                order_data = {
+                    "order_id": item.order.id,
+                    "order_number": item.order.order_number,
+                    "user_name": item.order.user.nickname or item.order.user.username if item.order.user else "未知用户",
+                    "quantity": item.quantity,
+                    "total_price": float(item.total_price),
+                    "order_status": item.order.status,
+                    "created_at": item.created_at
+                }
+                recent_order_data.append(order_data)
+            
+            # 转换为详情数据
+            product_dict = await product.to_dict()
+            product_dict.update({
+                "order_count": order_count,
+                "total_sales": total_sales,
+                "recent_orders": recent_order_data
+            })
+            
+            product_detail = AdminProductDetailSchema(**product_dict)
+            return ResponseHelper.success(product_detail, "获取商品详情成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取商品详情失败: {str(e)}")
+
+    @staticmethod
+    async def admin_operate_product(current_user: User, product_id: int, operation_data: AdminProductOperationSchema) -> ApiResponse:
+        """管理员操作商品"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+            
+            product = await Product.get(id=product_id)
+            
+            if operation_data.operation == "deactivate":
+                # 下架商品
+                if product.status == ProductStatus.INACTIVE:
+                    return ResponseHelper.error("商品已被下架", 400)
+                
+                product.status = ProductStatus.INACTIVE
+                
+            elif operation_data.operation == "activate":
+                # 上架商品
+                if product.status == ProductStatus.AVAILABLE:
+                    return ResponseHelper.error("商品已是可售状态", 400)
+                
+                # 检查库存，如果为0则设为售罄
+                if product.stock == 0:
+                    product.status = ProductStatus.SOLD_OUT
+                else:
+                    product.status = ProductStatus.AVAILABLE
+                
+            elif operation_data.operation == "sold_out":
+                # 设置售罄状态
+                product.status = ProductStatus.SOLD_OUT
+            
+            # 记录操作日志（这里简化处理，实际应该有专门的日志表）
+            # 可以在商品描述中添加管理员操作记录
+            from datetime import datetime
+            operation_log = f"\n[管理员操作 {datetime.now().strftime('%Y-%m-%d %H:%M')}] {operation_data.operation}: {operation_data.reason}"
+            if operation_data.notes:
+                operation_log += f" 备注：{operation_data.notes}"
+            
+            product.description = (product.description or "") + operation_log
+            await product.save()
+            
+            product_response = ProductResponseSchema.from_orm(product)
+            return ResponseHelper.success(product_response, f"商品操作成功")
+
+        except DoesNotExist:
+            return ResponseHelper.not_found("商品不存在")
+        except Exception as e:
+            return ResponseHelper.server_error(f"商品操作失败: {str(e)}")
+
+    @staticmethod
+    async def admin_get_product_statistics(current_user: User) -> ApiResponse:
+        """管理员获取商品统计"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+
+            # 获取所有商品
+            all_products = await Product.all()
+            
+            stats = {
+                "total_products": len(all_products),
+                "available_products": 0,
+                "sold_out_products": 0,
+                "inactive_products": 0,
+                "low_stock_products": 0,
+                "total_orders": 0,
+                "total_sales": 0.0,
+                "top_categories": {}
+            }
+            
+            # 统计各状态商品数量
+            for product in all_products:
+                if product.status == ProductStatus.AVAILABLE:
+                    stats["available_products"] += 1
+                elif product.status == ProductStatus.SOLD_OUT:
+                    stats["sold_out_products"] += 1
+                elif product.status == ProductStatus.INACTIVE:
+                    stats["inactive_products"] += 1
+                
+                if product.stock < 10:
+                    stats["low_stock_products"] += 1
+                
+                # 统计各分类商品数量
+                category = product.category
+                if category in stats["top_categories"]:
+                    stats["top_categories"][category] += 1
+                else:
+                    stats["top_categories"][category] = 1
+            
+            # 统计订单和销售数据
+            from app.models.order import OrderItem
+            all_order_items = await OrderItem.all().select_related('order')
+            completed_items = [item for item in all_order_items if item.order.status in ['completed', 'delivered']]
+            
+            stats["total_orders"] = len(set(item.order_id for item in all_order_items))
+            stats["total_sales"] = sum(float(item.total_price) for item in completed_items)
+            
+            return ResponseHelper.success(stats, "获取商品统计成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取商品统计失败: {str(e)}") 

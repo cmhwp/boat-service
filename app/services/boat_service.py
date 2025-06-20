@@ -1,6 +1,7 @@
 from typing import Optional, List
 from tortoise.exceptions import IntegrityError, DoesNotExist
 from tortoise.queryset import QuerySet
+from datetime import datetime
 from app.models.boat import Boat, BoatStatus, BoatType
 from app.models.merchant import Merchant, MerchantStatus
 from app.models.user import User, UserRole
@@ -10,7 +11,11 @@ from app.schemas.boat import (
     BoatResponseSchema,
     BoatDetailSchema,
     BoatListItemSchema,
-    BoatStatusUpdateSchema
+    BoatStatusUpdateSchema,
+    AdminBoatQuerySchema,
+    AdminBoatOperationSchema,
+    AdminBoatListItemSchema,
+    AdminBoatDetailSchema
 )
 from app.schemas.response import ResponseHelper, ApiResponse, PaginatedData
 
@@ -237,20 +242,238 @@ class BoatService:
 
     @staticmethod
     async def get_public_boat_detail(boat_id: int) -> ApiResponse:
-        """获取公开船只详情（用户端）"""
+        """获取船只公开详情（用户端）"""
         try:
+            # 获取船只详情
             boat = await Boat.filter(
-                id=boat_id, 
-                status=BoatStatus.AVAILABLE,
-                merchant__status=MerchantStatus.ACTIVE
+                id=boat_id,
+                status=BoatStatus.AVAILABLE
             ).select_related('merchant').first()
             
             if not boat:
                 return ResponseHelper.not_found("船只不存在或不可用")
 
+            # 使用 to_dict 方法正确转换数据
             boat_dict = await boat.to_dict()
             boat_detail = BoatDetailSchema(**boat_dict)
             return ResponseHelper.success(boat_detail, "获取船只详情成功")
 
         except Exception as e:
-            return ResponseHelper.server_error(f"获取船只详情失败: {str(e)}") 
+            return ResponseHelper.server_error(f"获取船只详情失败: {str(e)}")
+
+    # =================== 管理员相关方法 ===================
+
+    @staticmethod
+    async def admin_get_all_boats(current_user: User, query_params: AdminBoatQuerySchema) -> ApiResponse:
+        """管理员获取所有船只列表"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+            
+            # 构建查询
+            query = Boat.all().select_related('merchant')
+            
+            if query_params.merchant_id:
+                query = query.filter(merchant_id=query_params.merchant_id)
+            if query_params.boat_type:
+                query = query.filter(boat_type=query_params.boat_type)
+            if query_params.status:
+                query = query.filter(status=query_params.status)
+            if query_params.name:
+                query = query.filter(name__icontains=query_params.name)
+            if query_params.license_number:
+                query = query.filter(license_number__icontains=query_params.license_number)
+
+            # 分页查询
+            offset = (query_params.page - 1) * query_params.page_size
+            boats = await query.offset(offset).limit(query_params.page_size).order_by('-created_at')
+            total = await query.count()
+
+            # 转换为响应数据
+            boat_list = []
+            for boat in boats:
+                # 获取商家名称
+                merchant_name = boat.merchant.merchant_name if boat.merchant else "未知商家"
+                
+                # 统计预约数据
+                from app.models.booking import BoatBooking
+                booking_count = await BoatBooking.filter(boat_id=boat.id).count()
+                total_income_data = await BoatBooking.filter(
+                    boat_id=boat.id,
+                    status__in=['completed']
+                ).values('total_amount')
+                total_income = sum(float(booking['total_amount']) for booking in total_income_data)
+                
+                boat_data = {
+                    "id": boat.id,
+                    "merchant_id": boat.merchant_id,
+                    "name": boat.name,
+                    "boat_type": boat.boat_type,
+                    "capacity": boat.capacity,
+                    "hourly_rate": float(boat.hourly_rate),
+                    "status": boat.status,
+                    "current_location": boat.current_location,
+                    "images": boat.images,
+                    "created_at": boat.created_at,
+                    "merchant_name": merchant_name,
+                    "booking_count": booking_count,
+                    "total_income": total_income
+                }
+                
+                boat_list.append(boat_data)
+            
+            total_pages = (total + query_params.page_size - 1) // query_params.page_size
+            paginated_data = PaginatedData(
+                items=boat_list,
+                total=total,
+                page=query_params.page,
+                page_size=query_params.page_size,
+                total_pages=total_pages
+            )
+
+            return ResponseHelper.success(paginated_data, "获取船只列表成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取船只列表失败: {str(e)}")
+
+    @staticmethod
+    async def admin_get_boat_detail(current_user: User, boat_id: int) -> ApiResponse:
+        """管理员获取船只详情"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+            
+            # 获取船只详情
+            boat = await Boat.filter(id=boat_id).select_related('merchant').first()
+            if not boat:
+                return ResponseHelper.not_found("船只不存在")
+
+            # 获取预约统计数据
+            from app.models.booking import BoatBooking
+            booking_count = await BoatBooking.filter(boat_id=boat.id).count()
+            total_income_data = await BoatBooking.filter(
+                boat_id=boat.id,
+                status__in=['completed']
+            ).values('total_amount')
+            total_income = sum(float(booking['total_amount']) for booking in total_income_data)
+            
+            # 获取最近的预约记录
+            recent_bookings = await BoatBooking.filter(
+                boat_id=boat.id
+            ).select_related('user').order_by('-created_at').limit(5)
+            
+            recent_booking_data = []
+            for booking in recent_bookings:
+                booking_data = {
+                    "id": booking.id,
+                    "user_name": booking.user.nickname or booking.user.username if booking.user else "未知用户",
+                    "start_time": booking.start_time,
+                    "end_time": booking.end_time,
+                    "status": booking.status,
+                    "total_amount": float(booking.total_amount)
+                }
+                recent_booking_data.append(booking_data)
+            
+            # 转换为详情数据
+            boat_dict = await boat.to_dict()
+            boat_dict.update({
+                "booking_count": booking_count,
+                "total_income": total_income,
+                "recent_bookings": recent_booking_data
+            })
+            
+            boat_detail = AdminBoatDetailSchema(**boat_dict)
+            return ResponseHelper.success(boat_detail, "获取船只详情成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取船只详情失败: {str(e)}")
+
+    @staticmethod
+    async def admin_operate_boat(current_user: User, boat_id: int, operation_data: AdminBoatOperationSchema) -> ApiResponse:
+        """管理员操作船只"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+            
+            boat = await Boat.get(id=boat_id)
+            
+            if operation_data.operation == "suspend":
+                # 暂停船只
+                if boat.status == BoatStatus.INACTIVE:
+                    return ResponseHelper.error("船只已被暂停", 400)
+                
+                boat.status = BoatStatus.INACTIVE
+                
+            elif operation_data.operation == "activate":
+                # 激活船只
+                if boat.status == BoatStatus.AVAILABLE:
+                    return ResponseHelper.error("船只已是可用状态", 400)
+                
+                boat.status = BoatStatus.AVAILABLE
+                
+            elif operation_data.operation == "maintenance":
+                # 设置维护状态
+                boat.status = BoatStatus.MAINTENANCE
+            
+            # 记录操作日志（这里简化处理，实际应该有专门的日志表）
+            # 可以在船只描述中添加管理员操作记录
+            operation_log = f"\n[管理员操作 {datetime.now().strftime('%Y-%m-%d %H:%M')}] {operation_data.operation}: {operation_data.reason}"
+            if operation_data.notes:
+                operation_log += f" 备注：{operation_data.notes}"
+            
+            boat.description = (boat.description or "") + operation_log
+            await boat.save()
+            
+            boat_response = BoatResponseSchema.from_orm(boat)
+            return ResponseHelper.success(boat_response, f"船只操作成功")
+
+        except DoesNotExist:
+            return ResponseHelper.not_found("船只不存在")
+        except Exception as e:
+            return ResponseHelper.server_error(f"船只操作失败: {str(e)}")
+
+    @staticmethod
+    async def admin_get_boat_statistics(current_user: User) -> ApiResponse:
+        """管理员获取船只统计"""
+        try:
+            # 检查用户是否是管理员
+            if current_user.role != UserRole.ADMIN:
+                return ResponseHelper.forbidden("只有管理员才能访问此功能")
+
+            # 获取所有船只
+            all_boats = await Boat.all()
+            
+            stats = {
+                "total_boats": len(all_boats),
+                "available_boats": 0,
+                "in_use_boats": 0,
+                "maintenance_boats": 0,
+                "inactive_boats": 0,
+                "total_bookings": 0,
+                "total_revenue": 0.0
+            }
+            
+            # 统计各状态船只数量
+            for boat in all_boats:
+                if boat.status == BoatStatus.AVAILABLE:
+                    stats["available_boats"] += 1
+                elif boat.status == BoatStatus.IN_USE:
+                    stats["in_use_boats"] += 1
+                elif boat.status == BoatStatus.MAINTENANCE:
+                    stats["maintenance_boats"] += 1
+                elif boat.status == BoatStatus.INACTIVE:
+                    stats["inactive_boats"] += 1
+            
+            # 统计预约和收入数据
+            from app.models.booking import BoatBooking
+            all_bookings = await BoatBooking.filter(status='completed')
+            stats["total_bookings"] = len(all_bookings)
+            stats["total_revenue"] = sum(float(booking.total_amount) for booking in all_bookings)
+            
+            return ResponseHelper.success(stats, "获取船只统计成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取船只统计失败: {str(e)}") 

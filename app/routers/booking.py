@@ -21,7 +21,12 @@ from app.schemas.booking import (
     CrewTaskDetailSchema,
     CrewTaskStatusUpdateSchema,
     CrewTaskQuerySchema,
-    CrewTaskStatsSchema
+    CrewTaskStatsSchema,
+    PaymentRequestSchema,
+    PaymentResponseSchema,
+    RefundRequestSchema,
+    RefundResponseSchema,
+    PaymentStatusResponseSchema
 )
 from app.schemas.response import ApiResponse, PaginatedData
 from app.services.booking_service import BookingService
@@ -456,4 +461,76 @@ async def get_crew_task_stats(
     
     注：收入按60%分成计算
     """
-    return await BookingService.get_crew_task_stats(current_user) 
+    return await BookingService.get_crew_task_stats(current_user)
+
+
+# =================== 支付相关接口 ===================
+
+@router.post("/payment", response_model=ApiResponse[PaymentResponseSchema], summary="支付预约")
+async def simulate_payment(
+    payment_data: PaymentRequestSchema,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    模拟支付船艇预约（用户端）
+    
+    - **booking_id**: 预约ID（必填）
+    - **payment_method**: 支付方式（默认为模拟支付）
+    - **payment_notes**: 支付备注（可选）
+    
+    支付规则：
+    - 只能支付自己的预约订单
+    - 只能支付待确认或已确认状态的预约
+    - 已支付的订单不能重复支付
+    - 模拟支付会立即成功
+    
+    注意：支付成功不会自动确认预约，仍需等待商家确认
+    """
+    return await BookingService.simulate_payment(current_user, payment_data)
+
+
+@router.get("/payment/status/{booking_id}", response_model=ApiResponse[PaymentStatusResponseSchema], summary="查询支付状态")
+async def get_payment_status(
+    booking_id: int = Path(..., description="预约ID"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    查询预约支付状态（用户端）
+    
+    返回预约的支付状态和基本信息
+    """
+    return await BookingService.get_payment_status(current_user, booking_id)
+
+
+@router.post("/payment/refund", response_model=ApiResponse[RefundResponseSchema], summary="申请退款")
+async def request_refund(
+    refund_data: RefundRequestSchema,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    申请预约退款（用户端）
+    
+    - **booking_id**: 预约ID（必填）
+    - **refund_reason**: 退款原因（必填，5-500字符）
+    
+    退款规则：
+    - 只能退款已支付的订单
+    - 服务进行中或已完成的订单不能退款
+    - 退款会自动取消预约
+    - 模拟退款会立即成功
+    """
+    return await BookingService.request_refund(current_user, refund_data)
+
+
+@router.get("/payment/records", response_model=ApiResponse[PaginatedData[PaymentStatusResponseSchema]], summary="获取支付记录")
+async def get_user_payment_records(
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(10, description="每页数量", ge=1, le=100),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取用户支付记录（用户端）
+    
+    返回用户的所有支付记录，包括已支付和已退款的订单
+    """
+    return await BookingService.get_user_payments(current_user, page, page_size) 

@@ -86,4 +86,48 @@ class BoatListItemSchema(BaseModel):
 class BoatStatusUpdateSchema(BaseModel):
     """船只状态更新数据验证"""
     status: BoatStatus = Field(..., description="状态")
-    current_location: Optional[str] = Field(None, max_length=255, description="当前位置") 
+    current_location: Optional[str] = Field(None, max_length=255, description="当前位置")
+
+
+# =================== 管理员相关模式 ===================
+
+class AdminBoatQuerySchema(BaseModel):
+    """管理员船只查询数据验证"""
+    merchant_id: Optional[int] = Field(None, description="商家ID过滤")
+    boat_type: Optional[BoatType] = Field(None, description="船只类型过滤")
+    status: Optional[BoatStatus] = Field(None, description="状态过滤")
+    name: Optional[str] = Field(None, description="船只名称搜索")
+    license_number: Optional[str] = Field(None, description="证书号搜索")
+    page: int = Field(1, ge=1, description="页码")
+    page_size: int = Field(10, ge=1, le=100, description="每页数量")
+
+
+class AdminBoatOperationSchema(BaseModel):
+    """管理员船只操作数据验证"""
+    operation: str = Field(..., description="操作类型：suspend（暂停）| activate（激活）| maintenance（维护）")
+    reason: str = Field(..., min_length=5, max_length=500, description="操作原因")
+    notes: Optional[str] = Field(None, max_length=500, description="管理员备注")
+
+    @validator('operation')
+    def validate_operation(cls, v):
+        allowed_operations = ['suspend', 'activate', 'maintenance']
+        if v not in allowed_operations:
+            raise ValueError(f'操作类型必须是: {", ".join(allowed_operations)}')
+        return v
+
+
+class AdminBoatListItemSchema(BoatListItemSchema):
+    """管理员船只列表项数据"""
+    merchant_name: str = Field(..., description="商家名称")
+    booking_count: int = Field(default=0, description="预约次数")
+    total_income: float = Field(default=0.0, description="总收入")
+
+    class Config:
+        from_attributes = True
+
+
+class AdminBoatDetailSchema(BoatDetailSchema):
+    """管理员船只详情数据"""
+    booking_count: int = Field(default=0, description="预约次数")
+    total_income: float = Field(default=0.0, description="总收入")
+    recent_bookings: List[dict] = Field(default=[], description="最近预约记录") 

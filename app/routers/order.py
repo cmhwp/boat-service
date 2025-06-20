@@ -14,11 +14,15 @@ from app.schemas.order import (
     OrderDetailSchema,
     OrderListItemSchema,
     PaymentResponseSchema,
-    OrderStatsSchema
+    OrderStatsSchema,
+    AdminOrderQuerySchema,
+    AdminOrderDetailSchema,
+    AdminOrderOperationSchema,
+    AdminOrderListItemSchema
 )
 from app.schemas.response import ApiResponse, PaginatedData
 from app.services.order_service import OrderService
-from app.utils.auth import get_current_user, require_merchant
+from app.utils.auth import get_current_user, require_merchant, require_admin
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -201,11 +205,97 @@ async def get_order_stats(
     current_user: User = Depends(require_merchant)
 ):
     """
-    获取商家订单统计数据
+    获取商家订单统计
     
-    包括：
-    - 各状态订单数量
-    - 订单总金额
-    - 已收款金额
+    包含各状态订单数量、金额统计等
     """
-    return await OrderService.get_order_stats(current_user) 
+    return await OrderService.get_order_stats(current_user)
+
+
+# =================== 管理员端订单管理接口 ===================
+
+@router.get("/admin/all", response_model=ApiResponse[PaginatedData[AdminOrderListItemSchema]], summary="管理员获取所有订单")
+async def admin_get_all_orders(
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(10, description="每页数量", ge=1, le=100),
+    status: Optional[OrderStatus] = Query(None, description="状态过滤"),
+    start_date: Optional[datetime] = Query(None, description="开始日期"),
+    end_date: Optional[datetime] = Query(None, description="结束日期"),
+    merchant_id: Optional[int] = Query(None, description="商家ID过滤"),
+    user_id: Optional[int] = Query(None, description="用户ID过滤"),
+    order_number: Optional[str] = Query(None, description="订单号搜索"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    管理员获取所有订单列表
+    
+    - **status**: 状态过滤（可选）
+    - **start_date**: 开始日期（可选）
+    - **end_date**: 结束日期（可选）
+    - **merchant_id**: 商家ID过滤（可选）
+    - **user_id**: 用户ID过滤（可选）
+    - **order_number**: 订单号搜索（可选）
+    
+    包含用户信息、商家信息、支付信息等完整数据
+    """
+    query_params = AdminOrderQuerySchema(
+        status=status,
+        start_date=start_date,
+        end_date=end_date,
+        merchant_id=merchant_id,
+        user_id=user_id,
+        order_number=order_number,
+        page=page,
+        page_size=page_size
+    )
+    return await OrderService.admin_get_all_orders(current_user, query_params)
+
+
+@router.get("/admin/{order_id}", response_model=ApiResponse[AdminOrderDetailSchema], summary="管理员获取订单详情")
+async def admin_get_order_detail(
+    order_id: int = Path(..., description="订单ID"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    管理员获取订单详情
+    
+    包含完整的订单信息、用户信息、商家信息、支付记录等
+    """
+    return await OrderService.admin_get_order_detail(current_user, order_id)
+
+
+@router.post("/admin/{order_id}/operate", response_model=ApiResponse[OrderResponseSchema], summary="管理员操作订单")
+async def admin_operate_order(
+    order_id: int = Path(..., description="订单ID"),
+    operation_data: AdminOrderOperationSchema = ...,
+    current_user: User = Depends(require_admin)
+):
+    """
+    管理员操作订单
+    
+    - **operation**: 操作类型（必填）
+      - force_cancel: 强制取消订单
+      - refund: 处理退款
+    - **reason**: 操作原因（必填）
+    - **notes**: 管理员备注（可选）
+    
+    支持的操作：
+    - 强制取消：可取消除已完成外的任何状态订单，已支付订单会恢复库存
+    - 处理退款：只能对已支付订单操作，会恢复库存并设置为退款状态
+    """
+    return await OrderService.admin_operate_order(current_user, order_id, operation_data)
+
+
+@router.get("/admin/statistics", response_model=ApiResponse[dict], summary="管理员获取平台订单统计")
+async def admin_get_order_statistics(
+    current_user: User = Depends(require_admin)
+):
+    """
+    管理员获取平台订单统计
+    
+    包含：
+    - 各状态订单数量统计
+    - 总金额和已支付金额
+    - 平台抽成和商家收入统计
+    """
+    return await OrderService.admin_get_order_statistics(current_user) 

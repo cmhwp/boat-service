@@ -29,7 +29,12 @@ from app.schemas.booking import (
     CrewTaskDetailSchema,
     CrewTaskStatusUpdateSchema,
     CrewTaskQuerySchema,
-    CrewTaskStatsSchema
+    CrewTaskStatsSchema,
+    PaymentRequestSchema,
+    PaymentResponseSchema,
+    RefundRequestSchema,
+    RefundResponseSchema,
+    PaymentStatusResponseSchema
 )
 from app.schemas.response import ResponseHelper, ApiResponse, PaginatedData
 
@@ -890,4 +895,182 @@ class BookingService:
             return ResponseHelper.success(task_list, f"获取今日任务成功，共{len(task_list)}个任务")
 
         except Exception as e:
-            return ResponseHelper.server_error(f"获取今日任务失败: {str(e)}") 
+            return ResponseHelper.server_error(f"获取今日任务失败: {str(e)}")
+
+    # =================== 支付相关服务方法 ===================
+
+    @staticmethod
+    async def simulate_payment(current_user: User, payment_data: PaymentRequestSchema) -> ApiResponse:
+        """模拟支付（用户端）"""
+        try:
+            # 获取预约订单
+            booking = await BoatBooking.filter(
+                id=payment_data.booking_id,
+                user=current_user
+            ).first()
+            
+            if not booking:
+                return ResponseHelper.not_found("预约订单不存在")
+
+            # 检查预约状态
+            if booking.status not in [BookingStatus.PENDING, BookingStatus.CONFIRMED]:
+                return ResponseHelper.error("当前状态的预约不能支付", 400)
+
+            # 检查支付状态
+            if booking.payment_status == PaymentStatus.PAID:
+                return ResponseHelper.error("订单已支付，无需重复支付", 400)
+
+            # 模拟支付处理
+            current_time = datetime.now()
+            
+            # 更新支付状态
+            booking.payment_status = PaymentStatus.PAID
+            booking.updated_at = current_time
+            
+            # 如果预约还是待确认状态，支付后不自动确认，仍需商家确认
+            # 保持原有预约状态不变
+            
+            await booking.save()
+
+            # 构建支付响应数据
+            payment_response = PaymentResponseSchema(
+                booking_id=booking.id,
+                booking_number=booking.booking_number,
+                total_amount=float(booking.total_amount),
+                payment_status=booking.payment_status,
+                payment_time=current_time,
+                payment_method=payment_data.payment_method,
+                payment_notes=payment_data.payment_notes
+            )
+
+            return ResponseHelper.success(payment_response, "支付成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"支付失败: {str(e)}")
+
+    @staticmethod
+    async def get_payment_status(current_user: User, booking_id: int) -> ApiResponse:
+        """查询支付状态（用户端）"""
+        try:
+            # 获取预约订单
+            booking = await BoatBooking.filter(
+                id=booking_id,
+                user=current_user
+            ).first()
+            
+            if not booking:
+                return ResponseHelper.not_found("预约订单不存在")
+
+            # 构建支付状态响应数据
+            payment_status_response = PaymentStatusResponseSchema(
+                booking_id=booking.id,
+                booking_number=booking.booking_number,
+                total_amount=float(booking.total_amount),
+                payment_status=booking.payment_status,
+                booking_status=booking.status,
+                created_at=booking.created_at,
+                payment_time=booking.updated_at if booking.payment_status == PaymentStatus.PAID else None
+            )
+
+            return ResponseHelper.success(payment_status_response, "查询支付状态成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"查询支付状态失败: {str(e)}")
+
+    @staticmethod
+    async def request_refund(current_user: User, refund_data: RefundRequestSchema) -> ApiResponse:
+        """申请退款（用户端）"""
+        try:
+            # 获取预约订单
+            booking = await BoatBooking.filter(
+                id=refund_data.booking_id,
+                user=current_user
+            ).first()
+            
+            if not booking:
+                return ResponseHelper.not_found("预约订单不存在")
+
+            # 检查支付状态
+            if booking.payment_status != PaymentStatus.PAID:
+                return ResponseHelper.error("只有已支付的订单才能申请退款", 400)
+
+            # 检查预约状态
+            if booking.status in [BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED]:
+                return ResponseHelper.error("服务进行中或已完成的订单不能退款", 400)
+
+            # 检查是否已经在退款中
+            if booking.payment_status == PaymentStatus.REFUNDING:
+                return ResponseHelper.error("订单已在退款处理中", 400)
+
+            if booking.payment_status == PaymentStatus.REFUNDED:
+                return ResponseHelper.error("订单已退款", 400)
+
+            # 模拟退款处理
+            current_time = datetime.now()
+            
+            # 更新退款状态
+            booking.payment_status = PaymentStatus.REFUNDED  # 模拟退款立即成功
+            booking.status = BookingStatus.CANCELLED
+            booking.cancelled_at = current_time
+            booking.cancel_reason = f"用户申请退款: {refund_data.refund_reason}"
+            booking.updated_at = current_time
+            
+            await booking.save()
+
+            # 构建退款响应数据
+            refund_response = RefundResponseSchema(
+                booking_id=booking.id,
+                booking_number=booking.booking_number,
+                refund_amount=float(booking.total_amount),
+                refund_status=booking.payment_status,
+                refund_time=current_time,
+                refund_reason=refund_data.refund_reason
+            )
+
+            return ResponseHelper.success(refund_response, "退款申请处理成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"申请退款失败: {str(e)}")
+
+    @staticmethod
+    async def get_user_payments(current_user: User, page: int = 1, page_size: int = 10) -> ApiResponse:
+        """获取用户支付记录（用户端）"""
+        try:
+            # 构建查询，只查询已支付或已退款的订单
+            query = BoatBooking.filter(
+                user=current_user,
+                payment_status__in=[PaymentStatus.PAID, PaymentStatus.REFUNDED, PaymentStatus.REFUNDING]
+            ).select_related('boat', 'merchant')
+
+            # 分页查询
+            offset = (page - 1) * page_size
+            bookings = await query.offset(offset).limit(page_size).order_by('-updated_at')
+            total = await query.count()
+
+            # 转换为响应数据
+            payment_list = []
+            for booking in bookings:
+                payment_item = PaymentStatusResponseSchema(
+                    booking_id=booking.id,
+                    booking_number=booking.booking_number,
+                    total_amount=float(booking.total_amount),
+                    payment_status=booking.payment_status,
+                    booking_status=booking.status,
+                    created_at=booking.created_at,
+                    payment_time=booking.updated_at if booking.payment_status in [PaymentStatus.PAID, PaymentStatus.REFUNDED] else None
+                )
+                payment_list.append(payment_item)
+            
+            total_pages = (total + page_size - 1) // page_size
+            paginated_data = PaginatedData(
+                items=payment_list,
+                total=total,
+                page=page,
+                page_size=page_size,
+                total_pages=total_pages
+            )
+
+            return ResponseHelper.success(paginated_data, "获取支付记录成功")
+
+        except Exception as e:
+            return ResponseHelper.server_error(f"获取支付记录失败: {str(e)}") 

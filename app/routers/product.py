@@ -7,12 +7,16 @@ from app.schemas.product import (
     ProductDetailSchema,
     ProductListItemSchema,
     ProductStockUpdateSchema,
-    ProductSearchSchema
+    ProductSearchSchema,
+    AdminProductQuerySchema,
+    AdminProductOperationSchema,
+    AdminProductListItemSchema,
+    AdminProductDetailSchema
 )
 from app.schemas.response import ApiResponse, PaginatedData, ResponseHelper
 from app.schemas.user import UploadResponseSchema
 from app.services.product_service import ProductService
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, require_admin
 from app.utils.cos_utils import cos_uploader
 from app.config.cos_config import cos_config
 from app.models.user import User
@@ -200,4 +204,98 @@ async def get_product_detail(
     product_id: int = Path(..., description="商品ID")
 ):
     """获取商品详情（用户端）"""
-    return await ProductService.get_public_product_detail(product_id) 
+    return await ProductService.get_public_product_detail(product_id)
+
+
+# =================== 管理员端商品管理接口 ===================
+
+@router.get("/admin/all", response_model=ApiResponse[PaginatedData[AdminProductListItemSchema]], summary="管理员获取所有商品")
+async def admin_get_all_products(
+    page: int = Query(1, description="页码", ge=1),
+    page_size: int = Query(10, description="每页数量", ge=1, le=100),
+    merchant_id: Optional[int] = Query(None, description="商家ID过滤"),
+    category: Optional[ProductCategory] = Query(None, description="商品分类过滤"),
+    status: Optional[ProductStatus] = Query(None, description="状态过滤"),
+    name: Optional[str] = Query(None, description="商品名称搜索"),
+    min_price: Optional[float] = Query(None, description="最低价格", ge=0),
+    max_price: Optional[float] = Query(None, description="最高价格", ge=0),
+    low_stock: Optional[bool] = Query(None, description="低库存筛选（库存<10）"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    管理员获取所有商品列表
+    
+    - **merchant_id**: 商家ID过滤（可选）
+    - **category**: 商品分类过滤（可选）
+    - **status**: 状态过滤（可选）
+    - **name**: 商品名称搜索（可选）
+    - **min_price**: 最低价格（可选）
+    - **max_price**: 最高价格（可选）
+    - **low_stock**: 低库存筛选（可选）
+    
+    包含商家信息、订单统计、销售统计等完整数据
+    """
+    from decimal import Decimal
+    query_params = AdminProductQuerySchema(
+        merchant_id=merchant_id,
+        category=category,
+        status=status,
+        name=name,
+        min_price=Decimal(str(min_price)) if min_price is not None else None,
+        max_price=Decimal(str(max_price)) if max_price is not None else None,
+        low_stock=low_stock,
+        page=page,
+        page_size=page_size
+    )
+    return await ProductService.admin_get_all_products(current_user, query_params)
+
+
+@router.get("/admin/{product_id}", response_model=ApiResponse[AdminProductDetailSchema], summary="管理员获取商品详情")
+async def admin_get_product_detail(
+    product_id: int = Path(..., description="商品ID"),
+    current_user: User = Depends(require_admin)
+):
+    """
+    管理员获取商品详情
+    
+    包含完整的商品信息、商家信息、订单统计、最近订单记录等
+    """
+    return await ProductService.admin_get_product_detail(current_user, product_id)
+
+
+@router.post("/admin/{product_id}/operate", response_model=ApiResponse[ProductResponseSchema], summary="管理员操作商品")
+async def admin_operate_product(
+    product_id: int = Path(..., description="商品ID"),
+    operation_data: AdminProductOperationSchema = ...,
+    current_user: User = Depends(require_admin)
+):
+    """
+    管理员操作商品
+    
+    - **operation**: 操作类型（必填）
+      - deactivate: 下架商品（设为停售状态）
+      - activate: 上架商品（设为可售状态）
+      - sold_out: 设置售罄状态
+    - **reason**: 操作原因（必填）
+    - **notes**: 管理员备注（可选）
+    
+    用于处理违规商品或管理商品状态
+    操作记录会保存在商品描述中
+    """
+    return await ProductService.admin_operate_product(current_user, product_id, operation_data)
+
+
+@router.get("/admin/statistics", response_model=ApiResponse[dict], summary="管理员获取商品统计")
+async def admin_get_product_statistics(
+    current_user: User = Depends(require_admin)
+):
+    """
+    管理员获取商品统计
+    
+    包含：
+    - 各状态商品数量统计
+    - 低库存商品统计
+    - 各分类商品分布
+    - 总订单数和销售额统计
+    """
+    return await ProductService.admin_get_product_statistics(current_user) 
