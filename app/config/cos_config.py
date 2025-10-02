@@ -1,6 +1,10 @@
 import os
 from typing import List
 import json
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 
 class COSConfig:

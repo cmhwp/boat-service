@@ -1,10 +1,13 @@
+# 首先加载环境变量
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
-from tortoise.contrib.fastapi import register_tortoise
+from tortoise import Tortoise
 from tortoise.exceptions import ValidationError, IntegrityError
 from contextlib import asynccontextmanager
-from dotenv import load_dotenv
 from app.config.database import DATABASE_CONFIG
 from app.config.redis_client import RedisClient
 from app.routers.user import router as user_router
@@ -26,17 +29,18 @@ from app.utils.exception_handlers import (
 )
 from app.schemas.response import ResponseHelper
 
-# 加载环境变量
-load_dotenv()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # 启动时初始化Redis连接
+    # 首先手动初始化数据库连接
+    await Tortoise.init(config=DATABASE_CONFIG)
+    await Tortoise.generate_schemas()
+    
+    # 初始化Redis连接
     await RedisClient.initialize()
     
-    # 启动后台定时任务
+    # 启动后台定时任务（在数据库初始化之后）
     from app.services.task_service import TaskService
     import asyncio
     import logging
@@ -62,6 +66,8 @@ async def lifespan(app: FastAPI):
         logger.error(f"停止后台任务时出错: {str(e)}")
     
     await RedisClient.close()
+    # 关闭数据库连接
+    await Tortoise.close_connections()
 
 
 # 创建FastAPI应用
@@ -100,13 +106,8 @@ app.include_router(cart_router, prefix="/api/v1")
 app.include_router(order_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
 
-# 数据库配置
-register_tortoise(
-    app,
-    config=DATABASE_CONFIG,
-    generate_schemas=True,
-    add_exception_handlers=True,
-)
+# 数据库配置已在lifespan中手动初始化
+# register_tortoise 调用已移除，避免重复初始化
 
 
 @app.get("/")
