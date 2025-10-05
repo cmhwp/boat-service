@@ -548,10 +548,46 @@ class OrderService:
                 current_time = datetime.now()
                 if target_status == OrderStatus.SHIPPED:
                     order.shipped_at = current_time
+                    # 发送发货通知和邮件
+                    await order.fetch_related('user', 'merchant')
+                    from app.services.notification_service import NotificationService
+                    from app.models.notification import NotificationType
+                    await NotificationService.send_order_notification(
+                        user_id=order.user_id,
+                        order_id=order.id,
+                        notification_type=NotificationType.ORDER_SHIPPED
+                    )
+                    # 发送发货邮件
+                    from app.utils.email_utils import email_sender
+                    order_items_list = await OrderItem.filter(order_id=order.id)
+                    items_html = '<ul>'
+                    for item in order_items_list:
+                        items_html += f'<li>{item.product_name} x {item.quantity}{item.product_unit}</li>'
+                    items_html += '</ul>'
+                    order_info = {
+                        'order_number': order.order_number,
+                        'receiver_name': order.receiver_name,
+                        'receiver_address': order.receiver_address,
+                        'receiver_phone': order.receiver_phone,
+                        'shipped_at': current_time.strftime('%Y-%m-%d %H:%M'),
+                        'items_html': items_html
+                    }
+                    email_sender.send_order_shipped_email(order.user.email, order_info)
                 elif target_status == OrderStatus.DELIVERED:
                     order.delivered_at = current_time
+                    # 发送送达通知
+                    from app.services.notification_service import NotificationService
+                    from app.models.notification import NotificationType
+                    await NotificationService.send_order_notification(
+                        user_id=order.user_id,
+                        order_id=order.id,
+                        notification_type=NotificationType.ORDER_DELIVERED
+                    )
                 elif target_status == OrderStatus.COMPLETED:
                     order.completed_at = current_time
+                    # 创建分账记录
+                    from app.services.split_payment_service import SplitPaymentService
+                    await SplitPaymentService.create_order_split(order)
                 elif target_status == OrderStatus.CANCELLED:
                     order.cancelled_at = current_time
                     # 如果是已支付订单被取消，需要恢复库存

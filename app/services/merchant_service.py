@@ -94,6 +94,24 @@ class MerchantService:
             
             await merchant.save()
             
+            # 发送通知给用户
+            from app.services.notification_service import NotificationService
+            from app.models.notification import NotificationType
+            if audit_data.audit_result == AuditResult.APPROVED:
+                await NotificationService.send_merchant_audit_notification(
+                    user_id=merchant.user_id,
+                    merchant_id=merchant.id,
+                    notification_type=NotificationType.MERCHANT_APPROVED,
+                    extra_info={"comment": audit_data.comment} if audit_data.comment else None
+                )
+            else:
+                await NotificationService.send_merchant_audit_notification(
+                    user_id=merchant.user_id,
+                    merchant_id=merchant.id,
+                    notification_type=NotificationType.MERCHANT_REJECTED,
+                    extra_info={"comment": audit_data.comment} if audit_data.comment else None
+                )
+            
             audit_response = MerchantAuditResponseSchema.from_orm(audit_record)
             return ResponseHelper.success(audit_response, "审核完成")
             

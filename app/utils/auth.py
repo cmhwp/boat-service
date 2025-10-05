@@ -48,6 +48,22 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
     return current_user
 
 
+async def get_user_from_token(token: str) -> Optional[User]:
+    """从token获取用户（用于WebSocket）"""
+    try:
+        token_payload = jwt_manager.verify_token(token)
+        if not token_payload:
+            return None
+        
+        user = await User.get_or_none(id=token_payload.user_id)
+        if not user or not user.is_active:
+            return None
+        
+        return user
+    except Exception:
+        return None
+
+
 def require_roles(allowed_roles: list):
     """角色权限检查装饰器"""
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
@@ -58,6 +74,11 @@ def require_roles(allowed_roles: list):
             )
         return current_user
     return role_checker
+
+
+def require_role(allowed_roles: list):
+    """角色权限检查装饰器（别名）"""
+    return require_roles(allowed_roles)
 
 
 # 角色权限依赖

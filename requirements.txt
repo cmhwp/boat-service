@@ -1,14 +1,14 @@
 # 版本不一定对
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-tortoise-orm[aiomysql]==0.20.0
-aerich==0.7.2
-pydantic[email]==2.5.0
-python-multipart==0.0.6
-bcrypt==4.1.2
-PyJWT==2.8.0
-redis==5.0.1
-python-dotenv==1.0.0
-requests==2.31.0
-cos-python-sdk-v5==1.9.25
-Pillow==10.1.0 
+fastapi
+uvicorn[standard]
+tortoise-orm[aiomysql]
+aerich
+pydantic[email]
+python-multipart
+bcrypt
+PyJWT
+redis
+python-dotenv   
+requests
+cos-python-sdk-v5
+Pillow

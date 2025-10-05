@@ -28,6 +28,9 @@ DATABASE_CONFIG: Dict[str, Any] = {
                 "app.models.product",
                 "app.models.booking",
                 "app.models.order",
+                "app.models.split_payment",
+                "app.models.notification",
+                "app.models.review",
                 "aerich.models"
             ],
             "default_connection": "default",

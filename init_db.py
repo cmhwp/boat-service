@@ -20,12 +20,12 @@ async def init_database():
             is_active=True,
             realname_status=RealnameStatus.VERIFIED
         )
-        print(f"✅ 默认管理员用户创建成功: {admin_user.username}")
+        print(f"[OK] 默认管理员用户创建成功: {admin_user.username}")
     else:
-        print("ℹ️ 管理员用户已存在")
+        print("[INFO] 管理员用户已存在")
     
     await Tortoise.close_connections()
-    print("✅ 数据库初始化完成")
+    print("[OK] 数据库初始化完成")
 
 
 if __name__ == "__main__":

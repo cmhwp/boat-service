@@ -19,6 +19,13 @@
 - **支付系统**: 多种支付方式、支付记录、退款处理
 - **数据统计**: 运营数据分析、图表展示、业务洞察
 
+### ✨ 高级功能 (v2.0)
+- **分账系统**: 平台、商家、船员三方自动分账，透明化收益管理
+- **WebSocket通知**: 实时推送预约、订单、评价等业务通知
+- **邮件增强**: 预约确认邮件、发货提醒邮件，精美HTML模板
+- **船艇服务评价**: 独立的服务评价体系，多维度评分，支持图片和点赞
+- **农产品评价**: 质量、新鲜度、包装评分，支持匿名评价和商家回复
+
 ### 🛠️ 技术特性
 - 基于 FastAPI 的高性能异步 Web 框架
 - 使用 Tortoise ORM 进行异步数据库操作
@@ -213,6 +220,38 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 - ReDoc文档: http://localhost:8000/redoc
 - 健康检查: http://localhost:8000/health
 
+## 🆕 v2.0 新增功能
+
+### 分账系统
+自动化的三方分账机制，透明化收益分配：
+- 预约服务：平台5% + 商家35% + 船员60%
+- 订单商品：平台10% + 商家90%
+- 支持分账记录查询和统计
+
+### WebSocket实时通知
+- 实时推送业务通知
+- 支持心跳保活机制
+- WebSocket端点：`/api/v1/notifications/ws`
+
+### 邮件通知增强
+- 预约确认邮件：包含预约详情、船艇信息
+- 发货提醒邮件：包含物流信息、商品清单
+- 精美HTML模板，响应式设计
+
+### 船艇服务评价
+- 三维度评分：服务质量、船艇状况、性价比
+- 支持图片上传和标签
+- 商家回复和点赞功能
+
+### 农产品评价
+- 三维度评分：质量、新鲜度、包装
+- 支持匿名评价
+- 商家回复和点赞功能
+
+**详细文档**: 请参阅 [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) 和 [CHANGELOG.md](CHANGELOG.md)
+
+---
+
 ## API 接口文档
 
 ### 用户系统 API
@@ -306,6 +345,35 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 - `GET /api/v1/dashboard/overview` - 获取仪表盘概览
 - `GET /api/v1/dashboard/charts` - 获取图表数据
+
+### 分账管理 API (v2.0)
+
+- `POST /api/v1/split-payments/rules` - 创建分账规则（管理员）
+- `GET /api/v1/split-payments/` - 获取分账记录列表
+- `GET /api/v1/split-payments/stats` - 获取分账统计
+
+### 通知管理 API (v2.0)
+
+- `WS /api/v1/notifications/ws` - WebSocket连接端点
+- `GET /api/v1/notifications/` - 获取通知列表
+- `POST /api/v1/notifications/mark-read` - 标记通知为已读
+- `POST /api/v1/notifications/mark-all-read` - 标记全部已读
+- `GET /api/v1/notifications/stats` - 获取通知统计
+- `DELETE /api/v1/notifications/{id}` - 删除通知
+
+### 评价管理 API (v2.0)
+
+**船艇服务评价**
+- `POST /api/v1/reviews/boat-service` - 创建船艇服务评价
+- `GET /api/v1/reviews/boat-service` - 获取评价列表
+- `POST /api/v1/reviews/boat-service/{id}/reply` - 商家回复评价
+- `POST /api/v1/reviews/boat_service/{id}/helpful` - 标记有帮助
+
+**农产品评价**
+- `POST /api/v1/reviews/product` - 创建农产品评价
+- `GET /api/v1/reviews/product` - 获取评价列表
+- `POST /api/v1/reviews/product/{id}/reply` - 商家回复评价
+- `POST /api/v1/reviews/product/{id}/helpful` - 标记有帮助
 
 ## 用户角色和权限
 

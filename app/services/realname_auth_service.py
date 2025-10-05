@@ -304,6 +304,23 @@ class RealnameAuthService:
                 user.realname_status = RealnameStatus.PENDING
             await user.save()
             
+            # 发送通知给用户
+            from app.services.notification_service import NotificationService
+            from app.models.notification import NotificationType
+            if update_data.status == RealnameAuthStatus.APPROVED:
+                await NotificationService.send_realname_auth_notification(
+                    user_id=realname_auth.user_id,
+                    auth_id=auth_id,
+                    notification_type=NotificationType.REALNAME_AUTH_APPROVED
+                )
+            elif update_data.status == RealnameAuthStatus.REJECTED:
+                await NotificationService.send_realname_auth_notification(
+                    user_id=realname_auth.user_id,
+                    auth_id=auth_id,
+                    notification_type=NotificationType.REALNAME_AUTH_REJECTED,
+                    extra_info={"reject_reason": update_data.reject_reason} if update_data.reject_reason else None
+                )
+            
             auth_response = RealnameAuthResponseSchema.from_orm(realname_auth)
             
             status_text = {

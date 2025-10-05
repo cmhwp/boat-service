@@ -121,6 +121,24 @@ class CrewService:
                 if user.role not in [UserRole.MERCHANT, UserRole.ADMIN]:
                     user.role = UserRole.CREW
                     await user.save()
+                
+                # 发送通过通知
+                from app.services.notification_service import NotificationService
+                from app.models.notification import NotificationType
+                await NotificationService.send_crew_application_notification(
+                    user_id=application.user_id,
+                    application_id=application.id,
+                    notification_type=NotificationType.CREW_APPLICATION_APPROVED
+                )
+            else:
+                # 发送拒绝通知
+                from app.services.notification_service import NotificationService
+                from app.models.notification import NotificationType
+                await NotificationService.send_crew_application_notification(
+                    user_id=application.user_id,
+                    application_id=application.id,
+                    notification_type=NotificationType.CREW_APPLICATION_REJECTED
+                )
             
             application_response = CrewApplicationResponseSchema.from_orm(application)
             message = "申请已同意，船员已成功加入" if handle_data.status == CrewApplicationStatus.APPROVED else "申请已拒绝"

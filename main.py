@@ -20,6 +20,9 @@ from app.routers.booking import router as booking_router
 from app.routers.cart import router as cart_router
 from app.routers.order import router as order_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.split_payment import router as split_payment_router
+from app.routers.notification import router as notification_router
+from app.routers.review import router as review_router
 from app.utils.exception_handlers import (
     http_exception_handler,
     validation_exception_handler,
@@ -105,6 +108,9 @@ app.include_router(booking_router, prefix="/api/v1")
 app.include_router(cart_router, prefix="/api/v1")
 app.include_router(order_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
+app.include_router(split_payment_router, prefix="/api/v1")
+app.include_router(notification_router, prefix="/api/v1")
+app.include_router(review_router, prefix="/api/v1")
 
 # 数据库配置已在lifespan中手动初始化
 # register_tortoise 调用已移除，避免重复初始化

@@ -346,13 +346,52 @@ class BookingService:
                 now = datetime.now()
                 if new_status == BookingStatus.CONFIRMED:
                     booking.confirmed_at = now
+                    # 发送确认通知和邮件
+                    await booking.fetch_related('user', 'boat')
+                    from app.services.notification_service import NotificationService
+                    from app.models.notification import NotificationType
+                    await NotificationService.send_booking_notification(
+                        user_id=booking.user_id,
+                        booking_id=booking.id,
+                        notification_type=NotificationType.BOOKING_CONFIRMED
+                    )
+                    # 发送确认邮件
+                    from app.utils.email_utils import email_sender
+                    booking_info = {
+                        'booking_number': booking.booking_number,
+                        'boat_name': booking.boat.name,
+                        'start_time': booking.start_time.strftime('%Y-%m-%d %H:%M'),
+                        'end_time': booking.end_time.strftime('%Y-%m-%d %H:%M'),
+                        'passenger_count': booking.passenger_count,
+                        'total_amount': float(booking.total_amount)
+                    }
+                    email_sender.send_booking_confirmation_email(booking.user.email, booking_info)
                 elif new_status == BookingStatus.COMPLETED:
                     booking.completed_at = now
                     # 释放船只资源
                     await Boat.filter(id=booking.boat_id).update(status=BoatStatus.AVAILABLE)
+                    # 创建分账记录
+                    from app.services.split_payment_service import SplitPaymentService
+                    await SplitPaymentService.create_booking_split(booking)
+                    # 发送完成通知
+                    from app.services.notification_service import NotificationService
+                    from app.models.notification import NotificationType
+                    await NotificationService.send_booking_notification(
+                        user_id=booking.user_id,
+                        booking_id=booking.id,
+                        notification_type=NotificationType.BOOKING_COMPLETED
+                    )
                 elif new_status in [BookingStatus.CANCELLED, BookingStatus.REJECTED]:
                     booking.cancelled_at = now
                     booking.cancel_reason = status_data.cancel_reason
+                    # 发送取消通知
+                    from app.services.notification_service import NotificationService
+                    from app.models.notification import NotificationType
+                    await NotificationService.send_booking_notification(
+                        user_id=booking.user_id,
+                        booking_id=booking.id,
+                        notification_type=NotificationType.BOOKING_CANCELLED
+                    )
 
                 await booking.save()
 

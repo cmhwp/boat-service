@@ -180,7 +180,7 @@ class EmailSender:
                 
                 <div style="text-align: center; color: #666; font-size: 14px;">
                     <p>此邮件由系统自动发送，请勿回复</p>
-                    <p>© 2024 绿色智能船艇平台 版权所有</p>
+                    <p>© 2025 绿色智能船艇平台 版权所有</p>
                 </div>
             </div>
         </body>
@@ -232,7 +232,132 @@ class EmailSender:
                 
                 <div style="text-align: center; color: #666; font-size: 14px;">
                     <p>此邮件由系统自动发送，请勿回复</p>
-                    <p>© 2024 绿色智能船艇平台 版权所有</p>
+                    <p>© 2025 绿色智能船艇平台 版权所有</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return self.send_email(to_email, subject, html_content)
+    
+    def send_booking_confirmation_email(self, to_email: str, booking_info: dict) -> bool:
+        """发送预约确认邮件"""
+        subject = "预约确认 - 绿色智能船艇平台"
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>预约确认</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; text-align: center; color: white;">
+                    <h1 style="margin: 0; font-size: 28px;">🚢 预约确认</h1>
+                    <p style="margin: 10px 0 0 0; opacity: 0.9;">您的船艇预约已确认</p>
+                </div>
+                
+                <div style="background: #f8f9fa; padding: 30px; border-radius: 10px; margin: 20px 0;">
+                    <h2 style="color: #2c3e50; margin-top: 0;">预约详情</h2>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>预约单号：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{booking_info.get('booking_number', '')}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>船艇名称：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{booking_info.get('boat_name', '')}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>开始时间：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{booking_info.get('start_time', '')}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>结束时间：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{booking_info.get('end_time', '')}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>乘客人数：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{booking_info.get('passenger_count', '')}人</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>总金额：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #e74c3c; font-weight: bold;">¥{booking_info.get('total_amount', '')}</td>
+                        </tr>
+                    </table>
+                    
+                    <div style="margin-top: 20px; padding: 15px; background: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px;">
+                        <p style="margin: 0;"><strong>✓ 预约状态：</strong>已确认</p>
+                        <p style="margin: 5px 0 0 0;">请您准时到达指定地点，祝您旅途愉快！</p>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; color: #666; font-size: 14px;">
+                    <p>此邮件由系统自动发送，请勿回复</p>
+                    <p>© 2025 绿色智能船艇平台 版权所有</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return self.send_email(to_email, subject, html_content)
+    
+    def send_order_shipped_email(self, to_email: str, order_info: dict) -> bool:
+        """发送订单发货提醒邮件"""
+        subject = "订单已发货 - 绿色智能船艇平台"
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>订单已发货</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; text-align: center; color: white;">
+                    <h1 style="margin: 0; font-size: 28px;">📦 订单已发货</h1>
+                    <p style="margin: 10px 0 0 0; opacity: 0.9;">您的商品正在配送中</p>
+                </div>
+                
+                <div style="background: #f8f9fa; padding: 30px; border-radius: 10px; margin: 20px 0;">
+                    <h2 style="color: #2c3e50; margin-top: 0;">订单详情</h2>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>订单号：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{order_info.get('order_number', '')}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>收货人：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{order_info.get('receiver_name', '')}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>收货地址：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{order_info.get('receiver_address', '')}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>联系电话：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{order_info.get('receiver_phone', '')}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>发货时间：</strong></td>
+                            <td style="padding: 10px; border-bottom: 1px solid #ddd;">{order_info.get('shipped_at', '')}</td>
+                        </tr>
+                    </table>
+                    
+                    <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                        <p style="margin: 0;"><strong>📍 物流提醒：</strong></p>
+                        <p style="margin: 5px 0 0 0;">商品预计2-3天内送达，请保持电话畅通，注意查收。</p>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <h3 style="color: #2c3e50;">商品清单</h3>
+                        {order_info.get('items_html', '<p>查看订单详情</p>')}
+                    </div>
+                </div>
+                
+                <div style="text-align: center; color: #666; font-size: 14px;">
+                    <p>此邮件由系统自动发送，请勿回复</p>
+                    <p>© 2025 绿色智能船艇平台 版权所有</p>
                 </div>
             </div>
         </body>
